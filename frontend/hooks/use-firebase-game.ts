@@ -207,6 +207,7 @@ export function useGameMutations() {
     playerAddress: string,
     commitHash: string
   ): Promise<boolean> => {
+    console.log('[doCommit] Starting doCommit', { sessionId, playerAddress, commitHash });
     setIsCommitting(true);
     commitError.current = null;
 
@@ -214,30 +215,47 @@ export function useGameMutations() {
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
 
       // Determine if player 1 or player 2
+      console.log('[doCommit] Getting session data...');
       const sessionSnapshot = await get(sessionRef);
       if (!sessionSnapshot.exists()) {
         throw new Error('Session not found');
       }
 
       const sessionData = sessionSnapshot.val();
+      console.log('[doCommit] Session data before commit:', sessionData);
+
       const isPlayer1 = sessionData.player1Address === playerAddress;
       const field = isPlayer1 ? 'player1Commit' : 'player2Commit';
 
+      console.log('[doCommit] Player identification:', { isPlayer1, field, playerAddress });
+
+      console.log('[doCommit] Updating session with commit...');
       await update(sessionRef, {
         [field]: commitHash,
       });
+      console.log('[doCommit] Commit update successful');
 
       // Check if both players committed
+      console.log('[doCommit] Checking if both players committed...');
       const updatedSnapshot = await get(sessionRef);
       const updatedData = updatedSnapshot.val();
+      console.log('[doCommit] Updated session data:', updatedData);
 
       if (updatedData.player1Commit && updatedData.player2Commit) {
+        console.log('[doCommit] Both players committed, updating status to reveal');
         await update(sessionRef, { status: 'reveal' });
+      } else {
+        console.log('[doCommit] Not both players committed yet', {
+          player1Commit: updatedData.player1Commit,
+          player2Commit: updatedData.player2Commit
+        });
       }
 
       setIsCommitting(false);
+      console.log('[doCommit] Completed successfully');
       return true;
     } catch (err) {
+      console.error('[doCommit] Error:', err);
       commitError.current = err as Error;
       setIsCommitting(false);
       return false;
@@ -528,9 +546,11 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
    */
   const commitSeed = useCallback(async (): Promise<boolean> => {
     if (!roomId || !playerAddress) {
+      console.log('[commitSeed] Missing roomId or playerAddress', { roomId, playerAddress });
       return false;
     }
 
+    console.log('[commitSeed] Starting commit flow', { roomId, playerAddress });
     setIsCommitting(true);
 
     try {
@@ -541,14 +561,23 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
       // Create commit hash (simple hash for demo - use crypto in production)
       const hash = btoa(`${seed}:${salt}`);
 
+      console.log('[commitSeed] Generated seed and hash', { seed, hash });
+
       // Store locally
       setLocalSeed(seed);
       setLocalCommit({ hash, seed, salt });
 
       // Create session if needed and commit
+      console.log('[commitSeed] Getting or creating session...');
       const session = await getOrCreateSession(roomId, playerAddress);
+      console.log('[commitSeed] Session result:', { session });
+
       if (session) {
-        await doCommit(session, playerAddress, hash);
+        console.log('[commitSeed] Calling doCommit...');
+        const commitResult = await doCommit(session, playerAddress, hash);
+        console.log('[commitSeed] doCommit result:', { commitResult });
+      } else {
+        console.error('[commitSeed] Failed to get session');
       }
 
       setIsCommitting(false);
@@ -697,6 +726,7 @@ export function useCombinedSeed(roomId: string | null) {
 
 /**
  * Helper to get existing session or create new one
+ * When Player 2 joins, this function updates player2Address in the session
  */
 async function getOrCreateSession(roomId: string, playerAddress: string): Promise<string | null> {
   try {
@@ -707,6 +737,18 @@ async function getOrCreateSession(roomId: string, playerAddress: string): Promis
     if (roomSnapshot.exists()) {
       const roomData = roomSnapshot.val();
       if (roomData.sessionId) {
+        // Session exists, check if we need to add player2
+        const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${roomData.sessionId}`);
+        const sessionSnapshot = await get(sessionRef);
+
+        if (sessionSnapshot.exists()) {
+          const sessionData = sessionSnapshot.val();
+          // If player2Address is null and this is not player1, add as player2
+          if (!sessionData.player2Address && sessionData.player1Address !== playerAddress) {
+            await update(sessionRef, { player2Address: playerAddress });
+          }
+        }
+
         return roomData.sessionId;
       }
     }
