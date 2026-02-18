@@ -68,14 +68,16 @@ export class ContractInteractions {
     // Contracts are lazily initialized when needed
   }
 
-  private ensureContractsInitialized() {
+  private async ensureContractsInitialized() {
     if (this.contractsInitialized) {
       return;
     }
 
     // Lazy initialize contracts on client side only
     if (typeof window === 'undefined') {
-      throw new Error('Contracts can only be accessed on the client side');
+      // For SSR, we'll allow proceeding without contracts initialized
+      this.contractsInitialized = true;
+      return;
     }
 
     try {
@@ -126,7 +128,7 @@ export class ContractInteractions {
    * Creates a session and locks the bet amount for both players
    */
   async startGame(params: GameStartParams): Promise<TransactionResult> {
-    this.ensureContractsInitialized();
+    await this.ensureContractsInitialized();
 
     const walletAddress = this.getWalletAddress();
     const account = await this.getAccountDetails(walletAddress);
@@ -197,7 +199,7 @@ export class ContractInteractions {
    * This verifies the gameplay on-chain and determines the winner
    */
   async submitScore(params: ScoreSubmissionParams): Promise<TransactionResult> {
-    this.ensureContractsInitialized();
+    await this.ensureContractsInitialized();
 
     const walletAddress = this.getWalletAddress();
     const account = await this.getAccountDetails(walletAddress);
@@ -241,7 +243,7 @@ export class ContractInteractions {
    * The contract determines the winner based on the submitted scores
    */
   async revealWinner(sessionId: number): Promise<TransactionResult> {
-    this.ensureContractsInitialized();
+    await this.ensureContractsInitialized();
 
     const walletAddress = this.getWalletAddress();
     const account = await this.getAccountDetails(walletAddress);
@@ -283,7 +285,7 @@ export class ContractInteractions {
    * The winner calls this to withdraw their winnings from the contract
    */
   async claimPrize(params: ClaimPrizeParams): Promise<TransactionResult> {
-    this.ensureContractsInitialized();
+    await this.ensureContractsInitialized();
 
     const walletAddress = this.getWalletAddress();
     const account = await this.getAccountDetails(walletAddress);
@@ -325,7 +327,7 @@ export class ContractInteractions {
    * Get the current game state from the contract
    */
   async getGameState(sessionId: number): Promise<any> {
-    this.ensureContractsInitialized();
+    await this.ensureContractsInitialized();
 
     try {
       const result = await rpc.getContractData(

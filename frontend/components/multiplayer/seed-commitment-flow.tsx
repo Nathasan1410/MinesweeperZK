@@ -131,7 +131,7 @@ export function SeedCommitmentFlow({
           <RevealPhaseContent
             isRevealing={isRevealing}
             onReveal={handleReveal}
-            opponentRevealed={!!localCommit}
+            opponentRevealed={!!opponentCommit}
           />
         )
       )}
