@@ -491,6 +491,38 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
     return () => unsubscribe();
   }, [sessionId, playerAddress]);
 
+  // Initialize localCommit if already committed (for players joining existing sessions)
+  useEffect(() => {
+    if (!sessionId || !playerAddress) return;
+
+    const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
+    const unsubscribe = onValue(sessionRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.val();
+      const isPlayer1 = data.player1Address === playerAddress;
+
+      // If this player has already committed, restore localCommit
+      if (isPlayer1 && data.player1Commit) {
+        setLocalCommit({
+          hash: data.player1Commit,
+          seed: data.player1Seed || '',
+          salt: ''
+        });
+        setLocalSeed(data.player1Seed || null);
+      } else if (!isPlayer1 && data.player2Commit) {
+        setLocalCommit({
+          hash: data.player2Commit,
+          seed: data.player2Seed || '',
+          salt: ''
+        });
+        setLocalSeed(data.player2Seed || null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [sessionId, playerAddress]);
+
   /**
    * Generate a random seed and commit it
    */

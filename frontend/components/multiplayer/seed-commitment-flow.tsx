@@ -71,6 +71,20 @@ export function SeedCommitmentFlow({
     }
   }, [canGenerate, phase]);
 
+  // Phase initialization on mount - check if both players have already committed
+  useEffect(() => {
+    // If we already have a local commit, check if we should be in reveal phase
+    if (localCommit) {
+      if (opponentCommit) {
+        console.log('[SeedCommitmentFlow] Both players already committed, starting in reveal phase');
+        setPhase('reveal');
+      } else {
+        console.log('[SeedCommitmentFlow] Already committed, starting in waiting_opponent phase');
+        setPhase('waiting_opponent');
+      }
+    }
+  }, [roomId, playerAddress, localCommit, opponentCommit]);
+
   // Auto-transition from waiting_opponent to reveal when both players have committed
   useEffect(() => {
     if (phase === 'waiting_opponent' && localCommit && opponentCommit) {
