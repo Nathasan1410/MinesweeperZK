@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run build)",
+      "Bash(bunx tsc --noEmit)",
+      "Bash(npx tsc:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(test:*)",
+      "Bash(taskkill:*)",
+      "Bash(node:*)",
+      "Bash(powershell:*)",
+      "Bash(bun run dev)",
+      "Bash(npm run build:*)",
+      "Bash(bun run tsc --noEmit)",
+      "Bash(curl:*)",
+      "Bash(npx eslint:*)",
+      "Bash(python ~/.claude/agent_swarm.py \"Fix seed reveal flow - Player 1 and Player 2 both stuck after commit because reveal button not appearing. The auto-transition to reveal phase happens but the reveal button/action is not being rendered. Check seed-commitment-flow.tsx reveal phase rendering.\" \"Fix contract initialization error - Invalid contract ID error in interactions.ts. The contract addresses may be in wrong format. Add try-catch to handle gracefully or skip contract init for dev mode.\" \"Fix hydration mismatch error - The typeof window check in ContractInteractions class causes SSR/client mismatch. Move contract initialization to useEffect or use dynamic import.\")",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(if exist frontendnul del:*)"
+    ]
+  }
+}

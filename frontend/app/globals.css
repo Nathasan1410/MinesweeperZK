@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Matte Logic Design System */
+  --background: #121213;
+  --surface: #1A1A1B;
+  --border-color: #3A3A3C;
+  --foreground: #F8F9FA;
+  --text-secondary: #818384;
+  --success: #538D4E;
+  --warning: #B59F3B;
+  --error: #DA4F49;
+
+  /* Game-specific colors */
+  --safe: #538D4E;
+  --flag: #B59F3B;
+  --mine: #DA4F49;
+  --action: #D7DADC;
+
+  /* Number colors */
+  --num-1: #5cd7fe;
+  --num-2: #60f760;
+  --num-3: #fe5f5f;
+  --num-4: #8a8aff;
+  --num-5: #fe8f8f;
+  --num-6: #00ffff;
+  --num-7: #000000;
+  --num-8: #808080;
+
+  --radius: 0;
+}
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border-color);
+  --color-foreground: var(--foreground);
+  --color-textPrimary: var(--foreground);
+  --color-textSecondary: var(--text-secondary);
+  --color-safe: var(--safe);
+  --color-flag: var(--warning);
+  --color-mine: var(--error);
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Monospace for numbers and values */
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Custom utilities */
+  .bg-background {
+    background-color: var(--background);
+  }
+
+  .bg-surface {
+    background-color: var(--surface);
+  }
+
+  .bg-border {
+    background-color: var(--border-color);
+  }
+
+  .border-border {
+    border-color: var(--border-color);
+  }
+
+  .text-textPrimary {
+    color: var(--foreground);
+  }
+
+  .text-textSecondary {
+    color: var(--text-secondary);
+  }
+
+  .text-safe {
+    color: var(--safe);
+  }
+
+  .text-flag {
+    color: var(--flag);
+  }
+
+  .text-mine {
+    color: var(--mine);
+  }
+}

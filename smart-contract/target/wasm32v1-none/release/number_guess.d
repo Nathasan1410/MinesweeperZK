@@ -1,0 +1,1 @@
+D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\target\wasm32v1-none\release\number_guess.wasm: D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\contracts\number-guess\src\lib.rs

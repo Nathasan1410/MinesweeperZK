@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Matte Logic Design System */
+  --background: #121213;
+  --surface: #1A1A1B;
+  --border-color: #3A3A3C;
+  --foreground: #F8F9FA;
+  --text-secondary: #818384;
+  --success: #538D4E;
+  --warning: #B59F3B;
+  --error: #DA4F49;
+  
+  --radius: 0;
+}
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border-color);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--text-secondary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  html {
+    background: var(--background);
+    color: var(--foreground);
+  }
+  
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  /* Monospace for numbers and values */
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}

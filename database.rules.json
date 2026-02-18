@@ -1,0 +1,34 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "rooms": {
+      ".indexOn": ["code", "status", "createdAt"],
+      "$roomId": {
+        ".validate": "newData.hasChildren(['code', 'creator', 'status', 'createdAt'])"
+      }
+    },
+    "roomState": {
+      "$roomId": {
+        ".validate": "newData.hasChildren(['phase'])"
+      }
+    },
+    "gameSessions": {
+      "$sessionId": {
+        ".validate": "newData.hasChildren(['player1', 'player2', 'status'])"
+      }
+    },
+    "playerMoves": {
+      "$sessionId": {
+        "$moveId": {
+          ".validate": "newData.hasChildren(['x', 'y', 'action', 'timestamp'])"
+        }
+      }
+    },
+    "seedCommits": {
+      "$roomId": {
+        ".validate": "newData.hasChildren(['commitHash'])"
+      }
+    }
+  }
+}

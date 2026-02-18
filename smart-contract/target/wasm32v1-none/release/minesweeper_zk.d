@@ -1,0 +1,1 @@
+D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\target\wasm32v1-none\release\minesweeper_zk.wasm: D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\contracts\minesweeper-zk\src\lib.rs

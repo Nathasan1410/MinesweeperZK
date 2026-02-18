@@ -1,0 +1,1 @@
+D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\target\wasm32v1-none\release\dice_duel.wasm: D:\Projekan\Macam2Hackathon\Minesweeper-ZK\Stellar-Game-Studio\contracts\dice-duel\src\lib.rs
