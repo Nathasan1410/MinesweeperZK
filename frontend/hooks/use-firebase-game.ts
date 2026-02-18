@@ -518,23 +518,32 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
       if (!snapshot.exists()) return;
 
       const data = snapshot.val();
-      const isPlayer1 = data.player1Address === playerAddress;
 
-      // If this player has already committed, restore localCommit
-      if (isPlayer1 && data.player1Commit) {
-        setLocalCommit({
-          hash: data.player1Commit,
-          seed: data.player1Seed || '',
-          salt: ''
-        });
-        setLocalSeed(data.player1Seed || null);
-      } else if (!isPlayer1 && data.player2Commit) {
-        setLocalCommit({
-          hash: data.player2Commit,
-          seed: data.player2Seed || '',
-          salt: ''
-        });
-        setLocalSeed(data.player2Seed || null);
+      // Determine which player this is and restore their commit/seed
+      if (data.player1Address === playerAddress) {
+        // I am player1
+        if (data.player1Commit) {
+          setLocalCommit({
+            hash: data.player1Commit,
+            seed: data.player1Seed || '',
+            salt: ''
+          });
+        }
+        if (data.player1Seed) {
+          setLocalSeed(data.player1Seed);
+        }
+      } else if (data.player2Address === playerAddress) {
+        // I am player2
+        if (data.player2Commit) {
+          setLocalCommit({
+            hash: data.player2Commit,
+            seed: data.player2Seed || '',
+            salt: ''
+          });
+        }
+        if (data.player2Seed) {
+          setLocalSeed(data.player2Seed);
+        }
       }
     });
 
@@ -594,7 +603,8 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
    */
   const revealSeed = useCallback(async (): Promise<boolean> => {
     if (!roomId || !playerAddress || !localSeed) {
-      return false;
+      console.error('[revealSeed] Cannot reveal: missing data', { roomId, playerAddress, localSeed });
+      return false;  // Don't set isRevealing since we're not starting the operation
     }
 
     setIsRevealing(true);

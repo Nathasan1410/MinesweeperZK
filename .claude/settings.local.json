@@ -21,7 +21,8 @@
       "Bash(git commit:*)",
       "Bash(if exist frontendnul del:*)",
       "Bash(start http://localhost:3000)",
-      "Bash(cmd.exe:*)"
+      "Bash(cmd.exe:*)",
+      "Bash(del:*)"
     ]
   }
 }

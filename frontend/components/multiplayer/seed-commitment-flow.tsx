@@ -51,6 +51,9 @@ export function SeedCommitmentFlow({
     const success = await revealSeed();
     if (success) {
       setPhase('reveal');
+    } else {
+      console.error('[SeedCommitmentFlow] Reveal failed');
+      // isRevealing will be reset by the hook on failure
     }
   };
 
