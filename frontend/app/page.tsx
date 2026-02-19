@@ -734,16 +734,16 @@ export default function Home() {
     console.log('[Auto-transition] Checking:', {
       currentView,
       roomStatus: room?.status,
-      player2Address: room?.player2Address,
       roomId: currentRoomId,
     });
 
+    // Only check if we're in a waiting state and room is ready
     if ((currentView === 'waiting-room' || currentView === 'lobby') && room?.status === 'ready') {
       console.log('[Auto-transition] Transitioning to seed-commit view');
       // Both players have joined - transition to seed commitment phase
       setCurrentView('seed-commit');
     }
-  }, [currentView, room?.status, room?.player2Address, currentRoomId]);
+  }, [currentView, room?.status, currentRoomId]);
 
   // Store opponent address and determine if current player is creator
   useEffect(() => {
@@ -842,8 +842,12 @@ export default function Home() {
   };
 
   const handlePlaySolo = () => {
-    // Generate random seed for this game
-    const seed = Math.random().toString(36).substring(2, 15);
+    // Generate cryptographically secure random seed for this game
+    // Math.random() is insecure and predictable - use crypto.getRandomValues() instead
+    const seed = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+      .map(b => b.toString(36))
+      .join('')
+      .substring(0, 12);
     setSeed(seed);
     setRoom('solo-room', 'SOLO');
     startGame();
@@ -894,11 +898,10 @@ export default function Home() {
 
       showNotification('success', 'Room Joined', 'Waiting for seed commitment phase...');
 
-      // Step 4: Wait for Firebase subscription to update and transition to game
-      // The useEffect at line 724-739 will handle the transition when room.status becomes 'ready'
-      // In the meantime, show lobby view
+      // Step 4: Both players should see the same waiting screen
+      // The auto-transition useEffect will handle moving to seed-commit when ready
       if (currentView === 'join-room') {
-        setCurrentView('lobby');
+        setCurrentView('waiting-room');
       }
     } catch (error) {
       console.error('Error joining room:', error);

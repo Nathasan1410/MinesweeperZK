@@ -5,6 +5,7 @@
 
 'use client';
 
+import { memo } from 'react';
 import { Flag, Bomb, Zap } from 'lucide-react';
 import { Cell } from '@/lib/game/types';
 import { THEME_COLORS } from '@/lib/game/types';
@@ -18,29 +19,27 @@ interface GameCellProps {
   actionMode?: 'reveal' | 'flag';
 }
 
-export function GameCell({
+const GameCellComponent = ({
   cell,
   onClick,
   onRightClick,
   disabled = false,
   showHint = false,
   actionMode = 'reveal',
-}: GameCellProps) {
+}: GameCellProps) => {
   const { x, y, value, state, isSafe } = cell;
 
-  // Determine cell colors based on state and value
   const getBackgroundColor = () => {
     if (state === 'revealed') {
-      if (value === -1) return THEME_COLORS.mine; // Exploded mine
+      if (value === -1) return THEME_COLORS.mine;
       if (value === 0) return THEME_COLORS.background;
       return THEME_COLORS.surface;
     }
     if (state === 'flagged') return THEME_COLORS.flag;
     if (state === 'exploded') return THEME_COLORS.mine;
 
-    // Hidden cells
-    if (showHint && isSafe) return 'rgba(83, 141, 78, 0.3)'; // Green tint for safe hint
-    if (actionMode === 'flag') return 'rgba(181, 159, 59, 0.2)'; // Yellow tint for flag mode
+    if (showHint && isSafe) return 'rgba(83, 141, 78, 0.3)';
+    if (actionMode === 'flag') return 'rgba(181, 159, 59, 0.2)';
     return THEME_COLORS.surface;
   };
 
@@ -84,7 +83,7 @@ export function GameCell({
       style={{
         backgroundColor: getBackgroundColor(),
         color: getTextColor(),
-        border: `1px solid ${getBorderColor()}`,
+        border: "1px solid " + getBorderColor(),
       }}
       onClick={onClick}
       onContextMenu={(e) => {
@@ -92,13 +91,12 @@ export function GameCell({
         onRightClick?.();
       }}
       disabled={disabled}
-      aria-label={`Cell ${x},${y} ${state}`}
+      aria-label={"Cell " + x + "," + y + " " + state}
       data-x={x}
       data-y={y}
     >
       {getCellContent()}
 
-      {/* Hover effect for action mode */}
       {state === 'hidden' && !disabled && (
         <div
           className="absolute inset-0 opacity-0 hover:opacity-20 transition-opacity pointer-events-none"
@@ -108,7 +106,6 @@ export function GameCell({
         />
       )}
 
-      {/* Reveal animation */}
       {state === 'revealed' && (
         <div
           className="absolute inset-0 animate-pulse pointer-events-none"
@@ -119,16 +116,15 @@ export function GameCell({
       )}
     </button>
   );
-}
+};
 
-/**
- * Small cell variant for opponent board preview
- */
+export const GameCell = memo(GameCellComponent);
+
 interface SmallCellProps {
   cell: Cell;
 }
 
-export function SmallGameCell({ cell }: SmallCellProps) {
+const SmallGameCellComponent = ({ cell }: SmallCellProps) => {
   const { state, value } = cell;
 
   const getBackgroundColor = () => {
@@ -153,4 +149,6 @@ export function SmallGameCell({ cell }: SmallCellProps) {
       {state === 'revealed' && value === -1 && <Bomb className="w-3 h-3" />}
     </div>
   );
-}
+};
+
+export const SmallGameCell = memo(SmallGameCellComponent);

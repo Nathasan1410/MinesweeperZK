@@ -1,6 +1,18 @@
 /**
  * Stellar Contract Interactions
  * Handles all smart contract interactions for the Minesweeper ZK game
+ *
+ * This module provides a comprehensive interface for interacting with the
+ * Minesweeper ZK smart contracts deployed on the Soroban network (built on Stellar).
+ * It handles the complete lifecycle of a game from creation to prize distribution.
+ *
+ * Key functionalities:
+ * - Game initialization with bet amount locking
+ * - Score submission with ZK proof verification
+ * - Winner determination and prize claiming
+ * - Transaction simulation for development/testing
+ *
+ * @packageDocumentation
  */
 
 import {
@@ -126,6 +138,28 @@ export class ContractInteractions {
   /**
    * Start a new game via Game Hub contract
    * Creates a session and locks the bet amount for both players
+   *
+   * This method creates a new game session on the contract, which:
+   * - Generates a unique session ID
+   * - Locks the bet amount from both players' wallets
+   * - Sets up the game state for score submission later
+   *
+   * For development wallets, this simulates the transaction without actually
+   * locking funds. For real wallets, it would require Freighter integration.
+   *
+   * @param params - Game start parameters including players and bet amount
+   * @returns Transaction result with hash and status
+   *
+   * @example
+   * const result = await contractInteractions.startGame({
+   *   player1: "GDRE6Y2Q4BJJX63F4X5X...",
+   *   player2: "GB6FWL5QN5J5X5X5X5X...",
+   *   betAmount: BigInt(100000000) // 10 XLM in stroops
+   * });
+   *
+   * if (result.status === 'success') {
+   *   console.log('Game started with tx:', result.hash);
+   * }
    */
   async startGame(params: GameStartParams): Promise<TransactionResult> {
     await this.ensureContractsInitialized();
@@ -197,6 +231,36 @@ export class ContractInteractions {
   /**
    * Submit score with ZK proof
    * This verifies the gameplay on-chain and determines the winner
+   *
+   * This method allows a player to submit their final score along with a ZK proof
+   * that attests to the validity of their gameplay. The proof ensures that:
+   * - The player followed the game rules
+   * - The score calculation is correct
+   * - No cheating occurred during gameplay
+   *
+   * The contract verifies the proof and stores the score. After both players
+   * submit scores, the winner can be revealed and the prize claimed.
+   *
+   * @param params - Score submission parameters including session, score, and proof
+   * @returns Transaction result with hash and status
+   *
+   * @example
+   * const result = await contractInteractions.submitScore({
+   *   sessionId: 12345,
+   *   playerAddress: "GDRE6Y2Q4BJJX63F4X5X...",
+   *   score: 850,
+   *   moves: 42,
+   *   zkProof: {
+   *     sessionId: 12345,
+   *     seed: "game-seed",
+   *     moves: [...],
+   *     score: 850,
+   *     proof: "base64-encoded-proof",
+   *     publicInputs: "base64-inputs",
+   *     verified: false,
+   *     isMock: true
+   *   }
+   * });
    */
   async submitScore(params: ScoreSubmissionParams): Promise<TransactionResult> {
     await this.ensureContractsInitialized();
@@ -283,6 +347,24 @@ export class ContractInteractions {
   /**
    * Claim the prize after winning
    * The winner calls this to withdraw their winnings from the contract
+   *
+   * After both players have submitted their scores and the winner has been
+   * determined, the winning player can call this method to claim their prize.
+   * The contract transfers the total bet amount (double the original bet) from
+   * the contract to the winner's wallet.
+   *
+   * @param params - Prize claiming parameters including session ID and winner address
+   * @returns Transaction result with hash and status
+   *
+   * @example
+   * const result = await contractInteractions.claimPrize({
+   *   sessionId: 12345,
+   *   winnerAddress: "GDRE6Y2Q4BJJX63F4X5X..."
+   * });
+   *
+   * if (result.status === 'success') {
+   *   console.log('Prize claimed with tx:', result.hash);
+   * }
    */
   async claimPrize(params: ClaimPrizeParams): Promise<TransactionResult> {
     await this.ensureContractsInitialized();

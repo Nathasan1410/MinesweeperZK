@@ -563,9 +563,16 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
     setIsCommitting(true);
 
     try {
-      // Generate random seed and salt
-      const seed = Math.random().toString(36).substring(2, 15);
-      const salt = Math.random().toString(36).substring(2, 15);
+      // Generate cryptographically secure random seed and salt
+      // Math.random() is insecure and predictable - use crypto.getRandomValues() instead
+      const seed = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+        .map(b => b.toString(36))
+        .join('')
+        .substring(0, 12);
+      const salt = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+        .map(b => b.toString(36))
+        .join('')
+        .substring(0, 12);
 
       // Create commit hash (simple hash for demo - use crypto in production)
       const hash = btoa(`${seed}:${salt}`);

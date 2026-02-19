@@ -1,6 +1,19 @@
 /**
  * Firebase Room Hooks
  * React hooks for Firebase room management
+ *
+ * This module provides a comprehensive set of React hooks for managing game rooms
+ * in Firebase Realtime Database. It handles the complete lifecycle of rooms from
+ * creation to joining, with real-time synchronization and proper error handling.
+ *
+ * Features:
+ * - Real-time room subscription and updates
+ * - Room creation with unique codes
+ * - Player joining and status management
+ * - Room listing for discovery
+ * - Seed commitment tracking
+ *
+ * @packageDocumentation
  */
 
 'use client';
@@ -44,6 +57,34 @@ export interface CreateRoomParams {
 
 /**
  * Hook to fetch and subscribe to public rooms
+ *
+ * This hook provides real-time updates to the list of available game rooms.
+ * It automatically filters to show only rooms that are in 'waiting' or 'ready'
+ * status, ensuring players only see joinable rooms.
+ *
+ * The hook uses Firebase Realtime Database's onValue listener to automatically
+ * update when rooms are created, updated, or removed.
+ *
+ * @returns Object containing the room list and loading/error states
+ *
+ * @example
+ * const { rooms, loading, error } = useRoomList();
+ *
+ * if (loading) {
+ *   return <div>Loading rooms...</div>;
+ * }
+ *
+ * if (error) {
+ *   return <div>Error loading rooms: {error.message}</div>;
+ * }
+ *
+ * return (
+ *   <div>
+ *     {rooms.map(room => (
+ *       <RoomCard key={room.id} room={room} />
+ *     ))}
+ *   </div>
+ * );
  */
 export function useRoomList() {
   const [rooms, setRooms] = useState<FirebaseRoom[]>([]);
@@ -109,6 +150,39 @@ export function useRoomList() {
 
 /**
  * Hook to subscribe to a specific room's updates
+ *
+ * This hook allows components to subscribe to real-time updates for a specific
+ * room. It's useful for monitoring room state changes such as:
+ * - Player joining (player2Address update)
+ * - Status changes (waiting → ready → playing → finished)
+ * - Seed commitment progress
+ * - Game session updates
+ *
+ * The hook automatically handles subscription cleanup when the component
+ * unmounts or the roomId changes.
+ *
+ * @param roomId - The ID of the room to subscribe to, or null to unsubscribe
+ * @returns Object containing the room data and loading/error states
+ *
+ * @example
+ * const { room, loading, error } = useRoom(roomId);
+ *
+ * useEffect(() => {
+ *   if (room?.status === 'ready') {
+ *     // Both players are ready to start
+ *     startGame();
+ *   }
+ * }, [room?.status]);
+ *
+ * if (loading) {
+ *   return <div>Loading room data...</div>;
+ * }
+ *
+ * if (error) {
+ *   return <div>Error: {error.message}</div>;
+ * }
+ *
+ * return <RoomDetails room={room} />;
  */
 export function useRoom(roomId: string | null) {
   const [room, setRoom] = useState<FirebaseRoom | null>(null);
@@ -251,6 +325,45 @@ export function useRoomByCode(roomCode: string | null) {
 
 /**
  * Hook for room mutations (create, join, update)
+ *
+ * This hook provides functions for modifying room data in Firebase Realtime
+ * Database. It includes proper loading states and error handling for all
+ * mutation operations.
+ *
+ * Supported operations:
+ * - createRoom: Creates a new room with unique code
+ * - joinRoom: Adds a player to an existing room
+ * - updateRoomStatus: Changes room status (waiting → ready → playing → finished)
+ *
+ * All mutations include loading states and error tracking.
+ *
+ * @returns Object containing mutation functions and their states
+ *
+ * @example
+ * const { createRoom, joinRoom, isCreating, isJoining, createError, joinError } = useRoomMutations();
+ *
+ * // Create a new room
+ * const handleCreate = async () => {
+ *   const result = await createRoom({
+ *     name: "My Game",
+ *     creator: "Player 1",
+ *     creatorAddress: "GDRE6Y2Q4BJJX...",
+ *     betAmount: 10
+ *   });
+ *
+ *   if (result) {
+ *     // Navigate to created room
+ *     router.push(`/room/${result.roomId}`);
+ *   }
+ * };
+ *
+ * // Join a room by code
+ * const handleJoin = async (roomId: string) => {
+ *   const success = await joinRoom(roomId, "GB6FWL5QN5J5X...");
+ *   if (success) {
+ *     console.log('Successfully joined room');
+ *   }
+ * };
  */
 export function useRoomMutations() {
   const [isCreating, setIsCreating] = useState(false);
@@ -259,15 +372,39 @@ export function useRoomMutations() {
   const joinError = useRef<Error | null>(null);
 
   /**
-   * Create a new room
+   * Create a new room in Firebase Realtime Database
+   *
+   * Creates a new game room with the following:
+   * - Unique 4-character room code for joining
+   * - Random expiration time (24 hours from creation)
+   * - Initial 'waiting' status
+   * - Creator information and bet amount
+   *
+   * @param params - Room creation parameters
+   * @returns Object with roomId and roomCode, or null on failure
+   *
+   * @example
+   * const result = await createRoom({
+   *   name: "Speed Minesweeper",
+   *   creator: "ProGamer123",
+   *   creatorAddress: "GDRE6Y2Q4BJJX...",
+   *   betAmount: 5, // 5 XLM
+   *   isPublic: true // Show in room list
+   * });
    */
   const createRoom = useCallback(async (params: CreateRoomParams): Promise<{ roomId: string; roomCode: string } | null> => {
     setIsCreating(true);
     createError.current = null;
 
     try {
-      // Generate a random 4-character room code
-      const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+      // Generate a cryptographically secure 4-character room code
+      // Math.random() is insecure and predictable - room codes could be guessed
+      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const randomBytes = new Uint8Array(4);
+      crypto.getRandomValues(randomBytes);
+      const roomCode = Array.from(randomBytes)
+        .map(b => chars[b % chars.length])
+        .join('');
 
       const roomsRef = ref(db, DB_PATHS.ROOMS);
       const newRoomRef = push(roomsRef);
@@ -297,7 +434,23 @@ export function useRoomMutations() {
   }, []);
 
   /**
-   * Join an existing room
+   * Join an existing room by adding player address
+   *
+   * Updates an existing room to mark it as ready to start and adds the
+   * second player's address. This is typically called when a player
+   * enters a room code and joins the game.
+   *
+   * @param roomId - The ID of the room to join
+   * @param playerAddress - The Stellar address of the joining player
+   * @returns true if successful, false on failure
+   *
+   * @example
+   * const success = await joinRoom("room123", "GB6FWL5QN5J5X...");
+   * if (success) {
+   *   console.log('Successfully joined room');
+   * } else {
+   *   console.error('Failed to join room');
+   * }
    */
   const joinRoom = useCallback(async (roomId: string, playerAddress: string): Promise<boolean> => {
     setIsJoining(true);
@@ -356,8 +509,17 @@ export function useRoomMutations() {
 /**
  * Generate a random room code
  */
+/**
+ * Generate a cryptographically secure room code
+ * Uses crypto.getRandomValues() to prevent room code guessing attacks
+ */
 export function generateRoomCode(): string {
-  return Math.random().toString(36).substring(2, 6).toUpperCase();
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const randomBytes = new Uint8Array(4);
+  crypto.getRandomValues(randomBytes);
+  return Array.from(randomBytes)
+    .map(b => chars[b % chars.length])
+    .join('');
 }
 
 /**

@@ -5,19 +5,19 @@
 
 'use client';
 
+import { memo } from 'react';
 import { Flag, Bomb } from 'lucide-react';
 import { useGameBoard, useMinesweeperGame } from '@/hooks/use-minesweeper-game';
 import { GameCell } from './game-cell';
-import { GAME_CONFIG } from '@/lib/game/types';
+import { GAME_CONFIG, THEME_COLORS } from '@/lib/game/types';
 
-export function GameBoard() {
+const GameBoardComponent = () => {
   const { minefield, onCellClick, actionMode, showHint, canPlay } = useGameBoard();
 
   const { GRID_SIZE } = GAME_CONFIG;
 
   return (
-    <div className="flex flex-col items-center justify-center p-4">
-      {/* Board Container */}
+    <div className="flex flex-col items-center justify-center p-4" data-testid="game-board">
       <div
         className="bg-surface border-2 border-border rounded-lg p-2 shadow-xl"
         style={{
@@ -25,18 +25,17 @@ export function GameBoard() {
           aspectRatio: '1',
         }}
       >
-        {/* Grid */}
         <div
           className="grid gap-1"
           style={{
-            gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+            gridTemplateColumns: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
+            gridTemplateRows: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
           }}
         >
           {minefield.map((row, y) =>
             row.map((cell, x) => (
               <div
-                key={`${x}-${y}`}
+                key={x + "-" + y}
                 className="aspect-square"
                 style={{
                   minWidth: '32px',
@@ -57,7 +56,6 @@ export function GameBoard() {
         </div>
       </div>
 
-      {/* Board Info */}
       <div className="mt-4 text-center text-sm text-textSecondary">
         <p>
           {actionMode === 'reveal' ? (
@@ -72,19 +70,17 @@ export function GameBoard() {
       </div>
     </div>
   );
-}
+};
 
-/**
- * Compact Board Variant for Mobile
- */
-export function CompactGameBoard() {
+export const GameBoard = memo(GameBoardComponent);
+
+const CompactGameBoardComponent = () => {
   const { minefield, onCellClick, actionMode, showHint, canPlay } = useGameBoard();
 
   const { GRID_SIZE } = GAME_CONFIG;
 
   return (
     <div className="flex flex-col items-center justify-center p-2">
-      {/* Board Container */}
       <div
         className="bg-surface border-2 border-border rounded-lg p-1 shadow-xl"
         style={{
@@ -93,18 +89,17 @@ export function CompactGameBoard() {
           aspectRatio: '1',
         }}
       >
-        {/* Grid */}
         <div
           className="grid gap-0.5"
           style={{
-            gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+            gridTemplateColumns: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
+            gridTemplateRows: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
           }}
         >
           {minefield.map((row, y) =>
             row.map((cell, x) => (
               <div
-                key={`${x}-${y}`}
+                key={x + "-" + y}
                 className="aspect-square"
               >
                 <GameCell
@@ -121,17 +116,16 @@ export function CompactGameBoard() {
       </div>
     </div>
   );
-}
+};
 
-/**
- * Opponent Board (Read-only, smaller)
- */
+export const CompactGameBoard = memo(CompactGameBoardComponent);
+
 interface OpponentBoardProps {
   title?: string;
   opponentMinefield?: import('@/lib/game/types').Minefield | null;
 }
 
-export function OpponentBoard({ title = "Opponent's Board", opponentMinefield: propMinefield }: OpponentBoardProps) {
+const OpponentBoardComponent = ({ title = "Opponent's Board", opponentMinefield: propMinefield }: OpponentBoardProps) => {
   const { opponentMinefield: storeMinefield } = useMinesweeperGame();
   const field = propMinefield ?? storeMinefield;
 
@@ -160,12 +154,12 @@ export function OpponentBoard({ title = "Opponent's Board", opponentMinefield: p
         <div
           className="grid gap-0.5"
           style={{
-            gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+            gridTemplateColumns: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
           }}
         >
           {field.map((row, y) =>
             row.map((cell, x) => (
-              <div key={`${x}-${y}`} className="aspect-square">
+              <div key={x + "-" + y} className="aspect-square">
                 <div
                   className="w-full h-full flex items-center justify-center text-xs border"
                   style={{
@@ -190,12 +184,11 @@ export function OpponentBoard({ title = "Opponent's Board", opponentMinefield: p
       </div>
     </div>
   );
-}
+};
 
-/**
- * Side-by-side boards comparison (for summary phase)
- */
-export function BoardComparison() {
+export const OpponentBoard = memo(OpponentBoardComponent);
+
+const BoardComparisonComponent = () => {
   const { myMinefield, opponentMinefield } = useMinesweeperGame();
 
   const { GRID_SIZE } = GAME_CONFIG;
@@ -206,7 +199,6 @@ export function BoardComparison() {
 
   return (
     <div className="flex flex-col lg:flex-row items-center justify-center gap-8 p-4">
-      {/* My Board */}
       <div className="flex flex-col items-center">
         <h3 className="text-lg font-semibold text-safe mb-3">Your Board</h3>
         <div
@@ -216,12 +208,12 @@ export function BoardComparison() {
           <div
             className="grid gap-1"
             style={{
-              gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+              gridTemplateColumns: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
             }}
           >
             {myMinefield.map((row, y) =>
               row.map((cell, x) => (
-                <div key={`${x}-${y}`} className="aspect-square min-w-8 min-h-8">
+                <div key={x + "-" + y} className="aspect-square min-w-8 min-h-8">
                   <GameCell cell={cell} onClick={() => {}} disabled />
                 </div>
               ))
@@ -230,7 +222,6 @@ export function BoardComparison() {
         </div>
       </div>
 
-      {/* Opponent Board */}
       <div className="flex flex-col items-center">
         <h3 className="text-lg font-semibold text-flag mb-3">Opponent's Board</h3>
         <div
@@ -240,12 +231,12 @@ export function BoardComparison() {
           <div
             className="grid gap-1"
             style={{
-              gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+              gridTemplateColumns: "repeat(" + GRID_SIZE + ", minmax(0, 1fr))",
             }}
           >
             {opponentMinefield.map((row, y) =>
               row.map((cell, x) => (
-                <div key={`${x}-${y}`} className="aspect-square min-w-8 min-h-8">
+                <div key={x + "-" + y} className="aspect-square min-w-8 min-h-8">
                   <GameCell cell={cell} onClick={() => {}} disabled />
                 </div>
               ))
@@ -254,7 +245,6 @@ export function BoardComparison() {
         </div>
       </div>
 
-      {/* VS Badge */}
       <div className="lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2">
         <div
           className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg border-2"
@@ -269,7 +259,6 @@ export function BoardComparison() {
       </div>
     </div>
   );
-}
+};
 
-// Import for VS badge
-import { THEME_COLORS } from '@/lib/game/types';
+export const BoardComparison = memo(BoardComparisonComponent);
