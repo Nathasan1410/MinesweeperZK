@@ -7,7 +7,9 @@
 
 "This is **Minesweeper ZK** — a competitive puzzle game where players prove they solved a hidden Minesweeper board using zero-knowledge proofs on Stellar.
 
-The problem: if you put Minesweeper on a blockchain, everyone can see where the mines are. We fix this with **o1js ZK proofs** — the board is generated locally from a shared seed, and players prove they won without ever revealing the mine positions to the network."
+This game is a 2-player Game, where people can bet on their XLM... (idk what else to add)
+
+The problem: if you put Minesweeper on a blockchain, everyone can see where the mines are. We fix this with **o1js ZK proofs** — the board is generated locally from a shared seed, and here we could have our completely fair minsweeper board without ever revealing the mine positions to the network."
 
 
 
@@ -18,9 +20,9 @@ The problem: if you put Minesweeper on a blockchain, everyone can see where the 
 
 *[Approve Freighter tx]*
 
-Now on a second browser, Player 2 joins and matches the bet. When Player 2 joins, the contract automatically calls `start_game` on the official DoraHacks Game Hub."
+Now on a second browser, Player 2 joins and matches the bet. When Player 2 joins, the contract automatically calls `start_game` on the Stellar Game Hub."
 
-"Our contract talks to the official Game Hub at two moments: when both players join (registering the match) and when we have a winner (reporting the result). It's all automatic cross-contract calls on Stellar Testnet."
+"Our contract talks to the official Stellar Hub at two moments: when both players join (registering the match) and when we have a winner (reporting the result). It's all automatic cross-contract calls on Stellar Testnet."
 
 ### [0:50 - 1:30] Gameplay
 **(Screen: Play the Minesweeper board)**
