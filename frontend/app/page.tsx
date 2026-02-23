@@ -8,19 +8,25 @@
 import { useState, useEffect } from 'react';
 import { Lock, Zap, Gamepad2, Wallet, Plus, Users, Copy, Check } from 'lucide-react';
 import { useMinesweeperGame } from '@/hooks/use-minesweeper-game';
-import { useRoomList, useRoomMutations, generateRoomCode, formatRoomStatus, useRoom, getRoomByCode, joinRoom } from '@/hooks/use-firebase-room';
+import { useRoomMutations, generateRoomCode, formatRoomStatus, useRoom, useRoomTimeout, getRoomByCode, joinRoom } from '@/hooks/use-firebase-room';
 import { SeedCommitmentFlow } from '@/components/multiplayer/seed-commitment-flow';
-import { useContractGameFlow, useSubmitScore, useClaimPrize } from '@/hooks/use-contract-game';
+import { useCreateGame, useJoinGame, useSubmitScore, useClaimPrize } from '@/hooks/use-contract-game';
+import { ref, get } from 'firebase/database';
+import { getDb, DB_PATHS } from '@/lib/firebase/client';
 import { generateZKProof } from '@/lib/zk/proof-generator';
 import { GameContainer } from '@/components/game';
+import { CommitRevealPage } from '@/components/multiplayer/commit-reveal-page';
+import { DualSummaryVerdict } from '@/components/summary-verdict';
+import { LobbyPage } from '@/components/lobby-page';
 import { stellarClient, DEV_WALLETS } from '@/lib/stellar/client';
 import { GAME_CONFIG, THEME_COLORS } from '@/lib/game/types';
+import type { Minefield } from '@/lib/game/types';
 
 // ============================================================================
 // VIEW TYPES
 // ============================================================================
 
-type AppView = 'landing' | 'wallet-connect' | 'lobby' | 'create-room' | 'join-room' | 'waiting-room' | 'seed-commit' | 'game' | 'summary';
+type AppView = 'landing' | 'wallet-connect' | 'lobby' | 'create-room' | 'join-room' | 'waiting-room' | 'seed-commit' | 'game' | 'commit-reveal' | 'summary';
 
 // ============================================================================
 // LANDING PAGE COMPONENT
@@ -227,10 +233,11 @@ function CreateRoomPage({
   onCreated
 }: {
   onCancel: () => void;
-  onCreated: (roomId: string, roomCode: string) => void;
+  onCreated: (roomId: string, roomCode: string, sessionId: number) => void;
 }) {
   const { player, showNotification } = useMinesweeperGame();
   const { createRoom, isCreating } = useRoomMutations();
+  const { createGame, isCreating: isCreatingGame } = useCreateGame();
   const [roomName, setRoomName] = useState('');
   const [betAmount, setBetAmount] = useState(10);
   const [error, setError] = useState<string | null>(null);
@@ -242,17 +249,32 @@ function CreateRoomPage({
       return;
     }
 
+    const sessionId = Math.floor(Math.random() * 1000000);
+
+    const success = await createGame({
+      sessionId,
+      player1: player.address,
+      betAmount: betAmount,
+    });
+
+    if (!success) {
+      setError('Contract transaction failed. Cannot create room.');
+      showNotification('error', 'Creation Failed', 'Failed to initialize game on contract.');
+      return;
+    }
+
     const result = await createRoom({
       name: roomName || `${player.address.slice(0, 8)}'s Room`,
       creator: player.address.slice(0, 8),
       creatorAddress: player.address,
       betAmount,
       isPublic: true,
+      contractSessionId: sessionId,
     });
 
     if (result) {
       showNotification('success', 'Room Created', `Room code: ${result.roomCode}. Share with your opponent!`);
-      onCreated(result.roomId, result.roomCode);
+      onCreated(result.roomId, result.roomCode, sessionId);
     } else {
       setError('Failed to create room. Please try again.');
       showNotification('error', 'Creation Failed', 'Could not create room. Please try again.');
@@ -316,14 +338,14 @@ function CreateRoomPage({
 
         <button
           onClick={handleCreate}
-          disabled={isCreating}
+          disabled={isCreating || isCreatingGame}
           className="w-full py-4 rounded-xl font-bold text-lg transition-all disabled:opacity-50"
           style={{
             backgroundColor: THEME_COLORS.safe,
             color: THEME_COLORS.background,
           }}
         >
-          {isCreating ? 'Creating...' : 'Create Room'}
+          {isCreating || isCreatingGame ? 'Creating...' : 'Create Room'}
         </button>
       </div>
     </div>
@@ -494,166 +516,6 @@ function WaitingRoom({
 // LOBBY PAGE COMPONENT
 // ============================================================================
 
-function LobbyPage({
-  onCreateRoom,
-  onJoinRoom,
-  onJoinRoomWithCode,
-  onPlaySolo
-}: {
-  onCreateRoom: () => void;
-  onJoinRoom: () => void;
-  onJoinRoomWithCode?: (roomCode: string) => void;
-  onPlaySolo: () => void;
-}) {
-  const { player } = useMinesweeperGame();
-  const { rooms, loading: roomsLoading, error: roomsError } = useRoomList();
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8">
-      <div className="max-w-2xl w-full space-y-8">
-        {/* Welcome */}
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-textPrimary">Game Lobby</h1>
-          <p className="text-textSecondary">
-            Welcome, {player?.address.slice(0, 8)}...{player?.address.slice(-4)}
-          </p>
-        </div>
-
-        {/* Game Settings */}
-        <div
-          className="p-6 rounded-xl space-y-4"
-          style={{ backgroundColor: THEME_COLORS.surface, border: `1px solid ${THEME_COLORS.border}` }}
-        >
-          <h3 className="font-semibold text-textPrimary">Game Settings</h3>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-textSecondary">Grid Size</span>
-              <p className="font-semibold text-textPrimary">{GAME_CONFIG.GRID_SIZE}x{GAME_CONFIG.GRID_SIZE}</p>
-            </div>
-            <div>
-              <span className="text-textSecondary">Mines</span>
-              <p className="font-semibold text-textPrimary">{GAME_CONFIG.TOTAL_MINES}</p>
-            </div>
-            <div>
-              <span className="text-textSecondary">Time Limit</span>
-              <p className="font-semibold text-textPrimary">{GAME_CONFIG.TIMEOUT_MINUTES} min</p>
-            </div>
-            <div>
-              <span className="text-textSecondary">Max Score</span>
-              <p className="font-semibold text-safe">{GAME_CONFIG.MAX_SCORE}</p>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t" style={{ borderColor: THEME_COLORS.border }}>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-textSecondary">Network</span>
-              <span className="font-semibold text-flag">Stellar Testnet</span>
-            </div>
-            <div className="flex justify-between items-center text-sm mt-2">
-              <span className="text-textSecondary">Bet Amount</span>
-              <span className="font-semibold text-textPrimary">10 XLM</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button
-            onClick={onCreateRoom}
-            className="py-4 px-6 rounded-xl font-bold text-lg transition-all hover:scale-105"
-            style={{
-              backgroundColor: THEME_COLORS.safe,
-              color: THEME_COLORS.background,
-            }}
-          >
-            Create Room
-          </button>
-          <button
-            onClick={onJoinRoom}
-            className="py-4 px-6 rounded-xl font-bold text-lg border-2 transition-all hover:scale-105"
-            style={{
-              backgroundColor: 'transparent',
-              borderColor: THEME_COLORS.flag,
-              color: THEME_COLORS.flag,
-            }}
-          >
-            Join Room
-          </button>
-        </div>
-
-        {/* Solo Play */}
-        <div className="text-center">
-          <button
-            onClick={onPlaySolo}
-            className="text-sm text-textSecondary hover:text-textPrimary transition-colors underline"
-          >
-            Or play solo (practice mode)
-          </button>
-        </div>
-
-        {/* Public Rooms List */}
-        <div
-          className="p-6 rounded-xl space-y-4"
-          style={{ backgroundColor: THEME_COLORS.surface, border: `1px solid ${THEME_COLORS.border}` }}
-        >
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-textPrimary">Public Rooms</h3>
-            <Users className="w-4 h-4 text-textSecondary" />
-          </div>
-
-          {roomsLoading ? (
-            <div className="text-center py-4 text-textSecondary">Loading rooms...</div>
-          ) : roomsError ? (
-            <div className="text-center py-4 text-mine">Error loading rooms. Please refresh.</div>
-          ) : rooms.length === 0 ? (
-            <div className="text-center py-4 text-textSecondary">No active rooms</div>
-          ) : (
-            <div className="space-y-2">
-              {rooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="p-3 rounded-lg border flex items-center justify-between"
-                  style={{ borderColor: THEME_COLORS.border }}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-textPrimary">{room.name}</span>
-                      <span
-                        className="text-xs px-2 py-0.5 rounded"
-                        style={{
-                          backgroundColor: THEME_COLORS.surface,
-                          color: room.status === 'waiting' ? THEME_COLORS.safe : THEME_COLORS.flag,
-                        }}
-                      >
-                        {formatRoomStatus(room.status)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-textSecondary mt-1">
-                      Code: <span className="font-mono">{room.code}</span> • Bet: {room.betAmount} XLM
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onJoinRoomWithCode?.(room.code)}
-                    disabled={room.status !== 'waiting'}
-                    className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      backgroundColor: room.status === 'waiting' ? THEME_COLORS.safe : THEME_COLORS.surface,
-                      color: room.status === 'waiting' ? THEME_COLORS.background : THEME_COLORS.textSecondary,
-                    }}
-                  >
-                    Join
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ============================================================================
 // DEV MODE TOGGLE
 // ============================================================================
@@ -710,13 +572,43 @@ export default function Home() {
     playerMoves,
     isWinner,
     opponentScore,
+    myMinefield,
+    seed,
+    finalMinefield,
+    finalScore,
+    finalTime,
+    saveGameSnapshot,
   } = useMinesweeperGame();
+
+  // State for summary data (from Firebase, after commit-reveal)
+  const [summaryData, setSummaryData] = useState<{
+    player1Score: number;
+    player2Score: number;
+    player1Minefield: string;
+    player2Minefield: string;
+    player1Time: string;
+    player2Time: string;
+    player1Address: string;
+    player2Address: string;
+    winner: string;
+  } | null>(null);
 
   // Subscribe to room state changes
   const room = useRoom(currentRoomId)?.room;
 
+  // Auto-expire rooms after 15 minutes of inactivity
+  useRoomTimeout(currentRoomId, room, () => {
+    console.log('[Timeout] Room expired, redirecting to lobby');
+    showNotification('warning', 'Room Expired', 'This room has expired due to inactivity.');
+    resetGame();
+    setCurrentRoomId(null);
+    setCurrentRoomCode(null);
+    setGameKey(prev => prev + 1);
+    setCurrentView('lobby');
+  });
+
   // Contract hooks
-  const contractFlow = useContractGameFlow();
+  const { joinGame, isJoining: isJoiningGame } = useJoinGame();
   const submitScoreHook = useSubmitScore();
   const claimPrizeHook = useClaimPrize();
 
@@ -763,18 +655,31 @@ export default function Home() {
     }
   }, [room, player]);
 
+  // Auto-transition: game → commit-reveal when game phase changes to 'summary'
+  useEffect(() => {
+    if (phase === 'summary' && currentView === 'game' && opponentAddress !== null) {
+      // Multiplayer game ended - save snapshot and transition to commit-reveal
+      saveGameSnapshot();
+      setCurrentView('commit-reveal');
+    }
+  }, [phase, currentView, opponentAddress, saveGameSnapshot]);
+
   // Handle game end - generate ZK proof and submit score
+  const [hasSubmittedScore, setHasSubmittedScore] = useState(false);
   useEffect(() => {
     const handleGameEnd = async () => {
-      // Only handle multiplayer games that have ended
+      // Only handle multiplayer games that have ended AND user is in summary view
       if (
         phase !== 'summary' ||
         !player ||
         !contractSessionId ||
-        currentView !== 'game' && currentView !== 'summary'
+        currentView !== 'summary' ||
+        hasSubmittedScore
       ) {
         return;
       }
+      
+      setHasSubmittedScore(true);
 
       // Solo games don't submit to contract
       if (opponentAddress === null) {
@@ -854,9 +759,10 @@ export default function Home() {
     setCurrentView('game');
   };
 
-  const handleRoomCreated = (roomId: string, roomCode: string) => {
+  const handleRoomCreated = (roomId: string, roomCode: string, sessionId: number) => {
     setCurrentRoomId(roomId);
     setCurrentRoomCode(roomCode);
+    setContractSessionId(sessionId);
     setCurrentView('waiting-room');
   };
 
@@ -880,11 +786,34 @@ export default function Home() {
         return;
       }
 
-      // Step 2: Set room ID FIRST to start Firebase subscription BEFORE joining
+      const sessionIdStr = roomQuery.contractSessionId;
+      if (!sessionIdStr) {
+        showNotification('error', 'Join Failed', 'Room has no valid contract session.');
+        setIsJoiningRoom(false);
+        return;
+      }
+      const sessionId = parseInt(sessionIdStr, 10);
+      
+      // Step 2: Call Soroban joinGame
+      const success = await joinGame({
+        sessionId,
+        player2: player.address,
+        betAmount: roomQuery.betAmount
+      });
+
+      if (!success) {
+        showNotification('error', 'Join Failed', 'Contract transaction failed.');
+        setIsJoiningRoom(false);
+        return;
+      }
+      
+      setContractSessionId(sessionId);
+
+      // Step 3: Set room ID FIRST to start Firebase subscription BEFORE joining
       // This ensures we receive updates from Firebase immediately after the join
       setCurrentRoomId(roomQuery.id);
 
-      // Step 3: Actually join the room via Firebase
+      // Step 4: Actually join the room via Firebase
       const joined = await joinRoom(roomQuery.id, player.address);
 
       if (!joined) {
@@ -906,6 +835,66 @@ export default function Home() {
     } catch (error) {
       console.error('Error joining room:', error);
       showNotification('error', 'Join Error', 'An unexpected error occurred. Please try again.');
+      setCurrentRoomId(null);
+    } finally {
+      setIsJoiningRoom(false);
+    }
+  };
+
+  // Join a room directly by ID (from lobby table)
+  const handleJoinRoomById = async (roomId: string) => {
+    if (!player) {
+      showNotification('error', 'Wallet Required', 'Please connect your wallet first');
+      return;
+    }
+
+    setIsJoiningRoom(true);
+    try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase DB not initialized');
+      const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
+      const snapshot = await get(roomRef);
+      if (!snapshot.exists()) {
+        throw new Error('Room not found');
+      }
+      const roomData = snapshot.val();
+      
+      const sessionIdStr = roomData.contractSessionId;
+      if (!sessionIdStr) {
+        showNotification('error', 'Join Failed', 'Room has no valid contract session.');
+        setIsJoiningRoom(false);
+        return;
+      }
+      const sessionId = parseInt(sessionIdStr, 10);
+      
+      // Call Soroban joinGame
+      const success = await joinGame({
+        sessionId,
+        player2: player.address,
+        betAmount: roomData.betAmount
+      });
+
+      if (!success) {
+        showNotification('error', 'Join Failed', 'Contract transaction failed.');
+        setIsJoiningRoom(false);
+        return;
+      }
+      
+      setContractSessionId(sessionId);
+
+      setCurrentRoomId(roomId);
+      const joined = await joinRoom(roomId, player.address);
+      if (!joined) {
+        showNotification('error', 'Join Failed', 'Could not join the room.');
+        setCurrentRoomId(null);
+        setIsJoiningRoom(false);
+        return;
+      }
+      showNotification('success', 'Room Joined', 'Waiting for seed commitment phase...');
+      setCurrentView('waiting-room');
+    } catch (error) {
+      console.error('Error joining room by ID:', error);
+      showNotification('error', 'Join Error', 'An unexpected error occurred.');
       setCurrentRoomId(null);
     } finally {
       setIsJoiningRoom(false);
@@ -942,9 +931,20 @@ export default function Home() {
         return (
           <LobbyPage
             onCreateRoom={() => setCurrentView('create-room')}
-            onJoinRoom={() => setCurrentView('join-room')}
-            onJoinRoomWithCode={handleJoinRoom}
+            onJoinGame={(roomId) => {
+              if (roomId) {
+                // Direct join by room ID from lobby table
+                handleJoinRoomById(roomId);
+              } else {
+                setCurrentView('join-room');
+              }
+            }}
+            onDisconnect={() => {
+              stellarClient.disconnect();
+              setCurrentView('landing');
+            }}
             onPlaySolo={handlePlaySolo}
+            playerAddress={player?.address}
           />
         );
 
@@ -982,36 +982,8 @@ export default function Home() {
             onComplete={async (combinedSeed) => {
               setSeed(combinedSeed);
 
-              // Determine player order: creator is player1, joiner is player2
-              const player1 = isCreator ? player.address : opponentAddress;
-              const player2 = isCreator ? opponentAddress : player.address;
-
-              console.log('[Contract] Starting game on contract...', { player1, player2 });
-
-              // Call contract start_game to lock bets and create session
-              const result = await contractFlow.executeGameFlow({
-                player1,
-                player2,
-                betAmount: betAmount,
-                onGameStart: (txHash) => {
-                  console.log('[Contract] Game started, tx:', txHash);
-                },
-              });
-
-              if (result.success) {
-                console.log('[Contract] Game started successfully');
-                // Generate a session ID from the transaction hash or timestamp
-                const sessionId = result.txHash
-                  ? parseInt(result.txHash.replace('dev_', '').split('_')[1]) % 1000000
-                  : Date.now() % 1000000;
-                setContractSessionId(sessionId);
-                showNotification('success', 'Game Started', 'Bets locked on contract. Good luck!');
-              } else {
-                console.error('[Contract] Failed to start game:', result.error);
-                showNotification('warning', 'Contract Start Failed', 'Game starting without contract (dev mode)');
-                // Still generate a session ID for local tracking
-                setContractSessionId(Date.now() % 1000000);
-              }
+              // Start game now! Handled entirely natively. 
+              showNotification('info', 'Game Synchronized', 'Matches verified locally.');
 
               startGame();
               setCurrentView('game');
@@ -1022,8 +994,73 @@ export default function Home() {
       case 'game':
         return <GameContainer key={gameKey} />;
 
+      case 'commit-reveal':
+        return currentRoomId && player && opponentAddress ? (
+          <CommitRevealPage
+            sessionId={room?.sessionId ?? currentRoomId}
+            roomId={currentRoomId}
+            playerAddress={player.address}
+            opponentAddress={opponentAddress}
+            isCreator={isCreator}
+            myScore={finalScore || score}
+            myMinefield={finalMinefield || myMinefield}
+            myTime={finalTime || '00:00'}
+            onBothCommitted={(data) => {
+              setSummaryData(data);
+              setCurrentView('summary');
+            }}
+          />
+        ) : null;
+
       case 'summary':
-        // Summary is handled within GameContainer
+        if (summaryData && player) {
+          // Parse minefields from JSON
+          let p1Minefield: Minefield;
+          let p2Minefield: Minefield;
+          try {
+            p1Minefield = JSON.parse(summaryData.player1Minefield);
+            p2Minefield = JSON.parse(summaryData.player2Minefield);
+          } catch {
+            p1Minefield = finalMinefield || myMinefield;
+            p2Minefield = finalMinefield || myMinefield;
+          }
+
+          return (
+            <DualSummaryVerdict
+              currentPlayerAddress={player.address}
+              player1={{
+                address: summaryData.player1Address,
+                score: summaryData.player1Score,
+                minefield: p1Minefield,
+                time: summaryData.player1Time,
+                isWinner: summaryData.winner === summaryData.player1Address,
+              }}
+              player2={{
+                address: summaryData.player2Address,
+                score: summaryData.player2Score,
+                minefield: p2Minefield,
+                time: summaryData.player2Time,
+                isWinner: summaryData.winner === summaryData.player2Address,
+              }}
+              seed={seed}
+              betAmount={betAmount}
+              txHash={undefined}
+              onFindNewMatch={() => {
+                resetGame();
+                setSummaryData(null);
+                setGameKey(prev => prev + 1);
+                setCurrentView('lobby');
+              }}
+              onBackToLobby={() => {
+                resetGame();
+                setSummaryData(null);
+                setGameKey(prev => prev + 1);
+                setCurrentView('lobby');
+              }}
+            />
+          );
+        }
+        // Fallback: solo game summary or no data yet
         return <GameContainer key={gameKey} />;
 
       default:

@@ -59,14 +59,43 @@ export function getDb(): Database | null {
   return result?.db || null;
 }
 
-// Export db as a getter for compatibility
-export const db = new Proxy({} as Database, {
-  get(target, prop) {
-    const dbInstance = getDb();
-    if (dbInstance && prop in dbInstance) {
-      return (dbInstance as any)[prop];
+// Export db as a Proxy that forwards ALL properties to the actual Database instance.
+// This ensures that the db reference is always up-to-date even if Firebase initializes late.
+// Hooks should still use getDb() or check for null if they need guaranteed initialization.
+export const db: Database = new Proxy({} as Database, {
+  get(_, prop) {
+    const instance = getDb();
+    if (!instance) {
+      // Return undefined for property access if not initialized.
+      // This allows the Firebase SDK to check for internal properties without crashing,
+      // though functions calling ref(db, ...) will still fail if db is not checked.
+      return undefined;
     }
-    return undefined;
+    const value = (instance as any)[prop];
+    return typeof value === 'function' ? value.bind(instance) : value;
+  },
+  set(_, prop, value) {
+    const instance = getDb();
+    if (instance) {
+      (instance as any)[prop] = value;
+      return true;
+    }
+    return false;
+  },
+  has(_, prop) {
+    const instance = getDb();
+    return instance ? prop in instance : false;
+  },
+  ownKeys() {
+    const instance = getDb();
+    return instance ? Object.getOwnPropertyNames(instance) : [];
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    const instance = getDb();
+    if (!instance) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(instance, prop);
+    if (descriptor) descriptor.enumerable = true;
+    return descriptor;
   },
 });
 

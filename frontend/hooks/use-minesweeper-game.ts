@@ -54,6 +54,11 @@ interface UseMinesweeperGameReturn {
   startTxHash: string | null;
   endTxHash: string | null;
 
+  // Post-game snapshot
+  finalMinefield: import('@/lib/game/types').Minefield | null;
+  finalScore: number;
+  finalTime: string;
+
   // Actions
   handleCellClick: (x: number, y: number) => void;
   toggleActionMode: () => void;
@@ -76,6 +81,7 @@ interface UseMinesweeperGameReturn {
   setOpponentScore: (score: number) => void;
   setOpponentMinefield: (minefield: import('@/lib/game/types').Minefield) => void;
   clearRoom: () => void;
+  saveGameSnapshot: () => void;
 
   // Derived state
   scoreBreakdown: ReturnType<typeof useScoreBreakdown>;
@@ -117,6 +123,9 @@ export function useMinesweeperGame(): UseMinesweeperGameReturn {
   const zkProof = useMinesweeperStore((s) => s.zkProof);
   const startTxHash = useMinesweeperStore((s) => s.startTxHash);
   const endTxHash = useMinesweeperStore((s) => s.endTxHash);
+  const finalMinefield = useMinesweeperStore((s) => s.finalMinefield);
+  const finalScore = useMinesweeperStore((s) => s.finalScore);
+  const finalTime = useMinesweeperStore((s) => s.finalTime);
 
   // Store actions
   const handleCellClick = useMinesweeperStore((s) => s.handleCellClick);
@@ -140,6 +149,7 @@ export function useMinesweeperGame(): UseMinesweeperGameReturn {
   const setOpponentScore = useMinesweeperStore((s) => s.setOpponentScore);
   const setOpponentMinefield = useMinesweeperStore((s) => s.setOpponentMinefield);
   const clearRoom = useMinesweeperStore((s) => s.clearRoom);
+  const saveGameSnapshot = useMinesweeperStore((s) => s.saveGameSnapshot);
 
   // Derived state
   const progress = useGameProgress();
@@ -246,6 +256,11 @@ export function useMinesweeperGame(): UseMinesweeperGameReturn {
     startTxHash,
     endTxHash,
 
+    // Post-game snapshot
+    finalMinefield,
+    finalScore,
+    finalTime,
+
     // Actions
     handleCellClick,
     toggleActionMode,
@@ -268,6 +283,7 @@ export function useMinesweeperGame(): UseMinesweeperGameReturn {
     setOpponentScore,
     setOpponentMinefield,
     clearRoom,
+    saveGameSnapshot,
 
     // Derived state
     scoreBreakdown,

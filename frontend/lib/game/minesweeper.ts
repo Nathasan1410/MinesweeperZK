@@ -1,6 +1,13 @@
 /**
  * Minesweeper Core Game Logic
  * Deterministic, seed-based minefield generation for ZK verification
+ *
+ * This module implements the core game mechanics of Minesweeper with deterministic
+ * minefield generation using seeded random number generation. This ensures that
+ * the same seed always produces the same minefield, which is essential for
+ * ZK proof verification.
+ *
+ * @packageDocumentation
  */
 
 import { GAME_CONFIG, Cell, CellValue, CellState, Minefield, PlayerMove } from './types';
@@ -12,10 +19,19 @@ import { GAME_CONFIG, Cell, CellValue, CellState, Minefield, PlayerMove } from '
 /**
  * Seeded PRNG using Mulberry32 algorithm
  * Produces the same sequence of numbers for the same seed
+ *
+ * This pseudo-random number generator is deterministic, meaning that for the
+ * same input seed, it will always produce the same sequence of random numbers.
+ * This is crucial for ZK proofs as it allows verification that both players
+ * used the same minefield configuration.
  */
 class SeededRandom {
   private state: number;
 
+  /**
+   * Initialize the seeded random number generator
+   * @param seed - The seed string to initialize the RNG
+   */
   constructor(seed: string) {
     // Hash the seed string to a number
     this.state = this.hashString(seed);
@@ -68,6 +84,18 @@ class SeededRandom {
 /**
  * Generate a minefield from a seed
  * Same seed always produces the same minefield
+ *
+ * This is the core function that creates the minefield layout. It uses a seeded
+ * random number generator to ensure deterministic results, which is essential for
+ * fair gameplay and ZK proof verification.
+ *
+ * @param seed - The seed string used to generate the minefield
+ * @returns A Minefield object with randomly placed mines
+ *
+ * @example
+ * // Generate a minefield with a specific seed
+ * const minefield = generateMinefield('my-secret-seed');
+ * console.log(minefield[0][0].value); // Always the same for the same seed
  */
 export function generateMinefield(seed: string): Minefield {
   const rng = new SeededRandom(seed);
@@ -136,7 +164,29 @@ function countAdjacentMines(minefield: Minefield, x: number, y: number): CellVal
 // ============================================================================
 
 /**
- * Reveal a cell (returns new minefield, does not mutate)
+ * Reveal a cell and recursively reveal adjacent empty cells
+ * Returns a new minefield without mutating the original
+ *
+ * When a cell is revealed:
+ * - If it's a mine, game ends (hitMine = true)
+ * - If it's empty (0), all adjacent cells are revealed recursively
+ * - If it's a number, only that cell is revealed
+ * - Returns the new minefield state and game status
+ *
+ * @param minefield - The current minefield state
+ * @param x - X coordinate of the cell to reveal
+ * @param y - Y coordinate of the cell to reveal
+ * @returns Object containing the new minefield, whether a mine was hit, and number of cells revealed
+ *
+ * @example
+ * // Reveal a cell at position (5, 5)
+ * const result = revealCell(minefield, 5, 5);
+ * if (result.hitMine) {
+ *   // Game over - player hit a mine
+ * } else {
+ *   // Continue playing
+ *   console.log(`Revealed ${result.revealed} cells`);
+ * }
  */
 export function revealCell(
   minefield: Minefield,
@@ -177,7 +227,22 @@ export function revealCell(
 }
 
 /**
- * Toggle flag on a cell
+ * Toggle flag on a cell (hidden ↔ flagged)
+ * Returns a new minefield without mutating the original
+ *
+ * This function allows players to mark cells as suspected mines by placing flags.
+ * Flags can be removed by clicking again on a flagged cell.
+ *
+ * @param minefield - The current minefield state
+ * @param x - X coordinate of the cell to toggle
+ * @param y - Y coordinate of the cell to toggle
+ * @returns A new minefield with the flag toggled
+ *
+ * @example
+ * // Toggle flag on cell (3, 3)
+ * const newMinefield = toggleFlag(minefield, 3, 3);
+ * // If cell was hidden, it's now flagged
+ * // If cell was flagged, it's now hidden
  */
 export function toggleFlag(minefield: Minefield, x: number, y: number): Minefield {
   const newField = cloneMinefield(minefield);
@@ -305,7 +370,27 @@ export function countFlags(minefield: Minefield): { correct: number; wrong: numb
 
 /**
  * Calculate score based on game performance
- * Matches the RISC Zero guest program scoring
+ * Matches the RISC Zero guest program scoring algorithm
+ *
+ * The scoring system is designed to reward:
+ * - Revealing safe cells (higher percentage = more points)
+ * - Correctly flagging mines (higher percentage = more points)
+ * - Penalizing wrong flag placements
+ *
+ * Score Formula:
+ * - Revealed Points: (revealedSafeCells / totalSafeCells) * PER_REVEALED_PERCENT
+ * - Flagged Points: (correctFlags / totalMines) * PER_FLAGGED_PERCENT
+ * - Wrong Flag Penalty: wrongFlags * WRONG_FLAG_PENALTY
+ * - Total Score = Revealed Points + Flagged Points - Wrong Flag Penalty
+ * - Final score is clamped between 0 and MAX_SCORE
+ *
+ * @param minefield - The completed minefield state
+ * @returns The calculated score (0-1000)
+ *
+ * @example
+ * // Calculate score for a completed game
+ * const score = calculateScore(finalMinefield);
+ * console.log(`Player scored ${score} points`);
  */
 export function calculateScore(minefield: Minefield): number {
   const { TOTAL_CELLS, TOTAL_MINES, SCORING } = GAME_CONFIG;
@@ -423,6 +508,23 @@ export function canFlag(minefield: Minefield, x: number, y: number): boolean {
 
 /**
  * Get a hint - find a safe cell that hasn't been revealed
+ *
+ * The hint algorithm prioritizes:
+ * 1. Cells with 0 adjacent mines (guaranteed safe)
+ * 2. Any other safe cell (non-mine)
+ *
+ * This function is used when players use hint tokens, giving them a safe
+ * cell to reveal. Hints are limited to 3 per game.
+ *
+ * @param minefield - The current minefield state
+ * @returns Coordinates of a safe cell to reveal, or null if no hints available
+ *
+ * @example
+ * // Get a hint for the current minefield
+ * const hint = getHint(minefield);
+ * if (hint) {
+ *   console.log(`Try revealing cell (${hint.x}, ${hint.y})`);
+ * }
  */
 export function getHint(minefield: Minefield): { x: number; y: number } | null {
   const { GRID_SIZE } = GAME_CONFIG;

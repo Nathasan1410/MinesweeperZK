@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, push, onValue, set, update, get, off } from 'firebase/database';
-import { db, DB_PATHS } from '@/lib/firebase/client';
+import { db, getDb, DB_PATHS } from '@/lib/firebase/client';
 import { SeedCommit, ZKProof, PlayerMove } from '@/lib/game/types';
 
 // ============================================================================
@@ -28,6 +28,13 @@ export interface GameSession {
   player2Score?: number;
   player1Proof?: ZKProof;
   player2Proof?: ZKProof;
+  // Post-game commit & reveal tracking
+  player1CommitReveal?: boolean;
+  player2CommitReveal?: boolean;
+  player1Minefield?: string;  // JSON-serialized minefield snapshot
+  player2Minefield?: string;
+  player1Time?: string;
+  player2Time?: string;
   winner?: string;
   combinedSeed?: string;
   createdAt: number;
@@ -57,6 +64,12 @@ export function useGameSession(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId) {
       setSession(null);
+      setLoading(false);
+      return;
+    }
+
+    const db = getDb();
+    if (!db) {
       setLoading(false);
       return;
     }
@@ -124,6 +137,9 @@ export function useOpponentProgress(sessionId: string | null, opponentAddress: s
       return;
     }
 
+    const db = getDb();
+    if (!db) return;
+
     const progressRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}/progress/${opponentAddress}`);
 
     const unsubscribe = onValue(
@@ -179,6 +195,9 @@ export function useGameMutations() {
     player2Address: string
   ): Promise<string | null> => {
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionsRef = ref(db, DB_PATHS.SESSIONS);
       const newSessionRef = push(sessionsRef);
       const sessionId = newSessionRef.key!;
@@ -212,6 +231,9 @@ export function useGameMutations() {
     commitError.current = null;
 
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
 
       // Determine if player 1 or player 2
@@ -274,6 +296,9 @@ export function useGameMutations() {
     revealError.current = null;
 
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
 
       // Determine if player 1 or player 2
@@ -325,6 +350,9 @@ export function useGameMutations() {
     scoreError.current = null;
 
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
 
       // Determine if player 1 or player 2
@@ -359,6 +387,9 @@ export function useGameMutations() {
     progress: Omit<PlayerProgress, 'lastMove'>
   ): Promise<void> => {
     try {
+      const db = getDb();
+      if (!db) return;
+
       const progressRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}/progress/${playerAddress}`);
       await set(progressRef, progress);
     } catch (err) {
@@ -375,6 +406,9 @@ export function useGameMutations() {
     proof: ZKProof
   ): Promise<boolean> => {
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
 
       // Determine if player 1 or player 2
@@ -419,6 +453,81 @@ export function useGameMutations() {
     }
   }, []);
 
+  /**
+   * Post-game commit & reveal: player confirms their score/minefield
+   */
+  const commitAndReveal = useCallback(async (
+    sessionId: string,
+    roomId: string,
+    playerAddress: string,
+    score: number,
+    minefieldJson: string,
+    timeString: string
+  ): Promise<boolean> => {
+    try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
+      const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
+      const sessionSnapshot = await get(sessionRef);
+      if (!sessionSnapshot.exists()) throw new Error('Session not found');
+
+      const sessionData = sessionSnapshot.val();
+      const isPlayer1 = sessionData.player1Address === playerAddress;
+
+      const updateData: Record<string, unknown> = {};
+      if (isPlayer1) {
+        updateData.player1CommitReveal = true;
+        updateData.player1Score = score;
+        updateData.player1Minefield = minefieldJson;
+        updateData.player1Time = timeString;
+      } else {
+        updateData.player2CommitReveal = true;
+        updateData.player2Score = score;
+        updateData.player2Minefield = minefieldJson;
+        updateData.player2Time = timeString;
+      }
+
+      await update(sessionRef, updateData);
+
+      // Check if both players have committed & revealed
+      const updatedSnapshot = await get(sessionRef);
+      const updatedData = updatedSnapshot.val();
+
+      if (updatedData.player1CommitReveal && updatedData.player2CommitReveal) {
+        // Determine winner by score
+        const p1Score = updatedData.player1Score || 0;
+        const p2Score = updatedData.player2Score || 0;
+        const winner = p1Score > p2Score
+          ? updatedData.player1Address
+          : p2Score > p1Score
+            ? updatedData.player2Address
+            : 'tie';
+
+        const now = Date.now();
+        await update(sessionRef, {
+          status: 'finished',
+          winner,
+          finishedAt: now,
+        });
+
+        // Also mark the room as finished so it's hidden from lobby
+        if (roomId) {
+          const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
+          await update(roomRef, {
+            status: 'finished',
+            finishedAt: now,
+          });
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error in commitAndReveal:', err);
+      return false;
+    }
+  }, []);
+
   return {
     createSession,
     commitSeed,
@@ -426,12 +535,64 @@ export function useGameMutations() {
     submitScore,
     updateProgress,
     submitProof,
+    commitAndReveal,
     isCommitting,
     isRevealing,
     isSubmittingScore,
     commitError: commitError.current,
     revealError: revealError.current,
     scoreError: scoreError.current,
+  };
+}
+
+// ============================================================================
+// HOOK: POST-GAME COMMIT & REVEAL STATUS
+// ============================================================================
+
+/**
+ * Hook to subscribe to both players' commit & reveal status
+ */
+export function useCommitRevealStatus(sessionId: string | null) {
+  const [player1Done, setPlayer1Done] = useState(false);
+  const [player2Done, setPlayer2Done] = useState(false);
+  const [sessionData, setSessionData] = useState<GameSession | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setPlayer1Done(false);
+      setPlayer2Done(false);
+      setSessionData(null);
+      return;
+    }
+
+    const db = getDb();
+    if (!db) return;
+
+    const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
+
+    const unsubscribe = onValue(
+      sessionRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val() as GameSession;
+          setSessionData({ ...data, id: sessionId });
+          setPlayer1Done(!!data.player1CommitReveal);
+          setPlayer2Done(!!data.player2CommitReveal);
+        }
+      },
+      (error) => {
+        console.error('Error subscribing to commit-reveal status:', error);
+      }
+    );
+
+    return () => off(sessionRef, 'value', unsubscribe);
+  }, [sessionId]);
+
+  return {
+    player1Done,
+    player2Done,
+    bothDone: player1Done && player2Done,
+    sessionData,
   };
 }
 
@@ -469,6 +630,9 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
   useEffect(() => {
     if (!roomId) return;
 
+    const db = getDb();
+    if (!db) return;
+
     const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
     const unsubscribe = onValue(roomRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -483,6 +647,9 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
   // Subscribe to session to track opponent's commit
   useEffect(() => {
     if (!sessionId || !playerAddress) return;
+
+    const db = getDb();
+    if (!db) return;
 
     const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
     const unsubscribe = onValue(sessionRef, (snapshot) => {
@@ -512,6 +679,9 @@ export function useSeedCommitment(roomId: string | null, playerAddress: string |
   // Initialize localCommit if already committed (for players joining existing sessions)
   useEffect(() => {
     if (!sessionId || !playerAddress) return;
+
+    const db = getDb();
+    if (!db) return;
 
     const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
     const unsubscribe = onValue(sessionRef, (snapshot) => {
@@ -660,6 +830,9 @@ export function useCombinedSeed(roomId: string | null) {
   useEffect(() => {
     if (!roomId) return;
 
+    const db = getDb();
+    if (!db) return;
+
     const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
     const unsubscribe = onValue(roomRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -712,6 +885,9 @@ export function useCombinedSeed(roomId: string | null) {
       const combined = combineSeeds(session.player1Seed, session.player2Seed);
 
       // Update session with combined seed
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${sessionId}`);
       await update(sessionRef, {
         combinedSeed: combined,
@@ -743,31 +919,34 @@ export function useCombinedSeed(roomId: string | null) {
 
 /**
  * Helper to get existing session or create new one
- * When Player 2 joins, this function updates player2Address in the session
+ * Enforces that room.creatorAddress is always player1
  */
 async function getOrCreateSession(roomId: string, playerAddress: string): Promise<string | null> {
   try {
+    const db = getDb();
+    if (!db) return null;
+
     // First, try to find existing session for this room
     const roomsRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
     const roomSnapshot = await get(roomsRef);
 
-    if (roomSnapshot.exists()) {
-      const roomData = roomSnapshot.val();
-      if (roomData.sessionId) {
-        // Session exists, check if we need to add player2
-        const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${roomData.sessionId}`);
-        const sessionSnapshot = await get(sessionRef);
+    if (!roomSnapshot.exists()) return null;
+    const roomData = roomSnapshot.val();
 
-        if (sessionSnapshot.exists()) {
-          const sessionData = sessionSnapshot.val();
-          // If player2Address is null and this is not player1, add as player2
-          if (!sessionData.player2Address && sessionData.player1Address !== playerAddress) {
-            await update(sessionRef, { player2Address: playerAddress });
-          }
+    if (roomData.sessionId) {
+      // Session exists, check if we need to add player2 (though they should be created together now)
+      const sessionRef = ref(db, `${DB_PATHS.SESSIONS}/${roomData.sessionId}`);
+      const sessionSnapshot = await get(sessionRef);
+
+      if (sessionSnapshot.exists()) {
+        const sessionData = sessionSnapshot.val();
+        // Fallback sync just in case
+        if (!sessionData.player2Address && roomData.player2Address) {
+          await update(sessionRef, { player2Address: roomData.player2Address });
         }
-
-        return roomData.sessionId;
       }
+
+      return roomData.sessionId;
     }
 
     // Create new session
@@ -775,11 +954,11 @@ async function getOrCreateSession(roomId: string, playerAddress: string): Promis
     const newSessionRef = push(sessionsRef);
     const newSessionId = newSessionRef.key!;
 
-    // Initialize session
+    // Initialize session with strict mappings from room
     await set(newSessionRef, {
       roomId,
-      player1Address: playerAddress, // Will be updated when player2 joins
-      player2Address: null,
+      player1Address: roomData.creatorAddress,
+      player2Address: roomData.player2Address || null,
       status: 'commit',
       createdAt: Date.now(),
     });

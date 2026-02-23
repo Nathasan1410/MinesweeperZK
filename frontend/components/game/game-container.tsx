@@ -211,7 +211,7 @@ export function SummaryScreen({
     >
       <div className="max-w-md w-full text-center space-y-8">
         {/* Result */}
-        <div className="space-y-2 flex flex-col items-center justify-center">
+        <div className="space-y-2 flex flex-col items-center justify-center" data-testid="summary-title">
           <div className="flex items-center justify-center">{getResultIcon()}</div>
           <h2
             className="text-4xl font-black"
@@ -226,7 +226,7 @@ export function SummaryScreen({
           className="p-6 rounded-lg space-y-4"
           style={{ backgroundColor: THEME_COLORS.surface, border: `1px solid ${THEME_COLORS.border}` }}
         >
-          <div className="flex justify-between">
+          <div className="flex justify-between" data-testid="final-score">
             <span style={{ color: THEME_COLORS.textSecondary }}>Final Score</span>
             <span className="font-bold text-2xl" style={{ color: getResultColor() }}>
               {score}
@@ -259,6 +259,7 @@ export function SummaryScreen({
             PLAY AGAIN
           </button>
           <button
+            data-testid="new-game-btn"
             onClick={onBackToLobby}
             className="w-full py-3 px-8 rounded-lg font-semibold transition-all hover:scale-105 active:scale-95"
             style={{

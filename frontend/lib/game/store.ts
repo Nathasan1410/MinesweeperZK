@@ -84,6 +84,11 @@ interface MinesweeperState {
   startTxHash: string | null;
   endTxHash: string | null;
 
+  // Post-game snapshot (preserved after game ends for summary)
+  finalMinefield: Minefield | null;
+  finalScore: number;
+  finalTime: string;
+
   // Global timer singleton (prevents multiple intervals)
   timerIntervalId: ReturnType<typeof setInterval> | null;
 }
@@ -155,6 +160,9 @@ interface MinesweeperActions {
   // Contract
   setStartTxHash: (hash: string) => void;
   setEndTxHash: (hash: string) => void;
+
+  // Post-game snapshot
+  saveGameSnapshot: () => void;
 }
 
 // ============================================================================
@@ -211,6 +219,9 @@ export const useMinesweeperStore = create<MinesweeperStore>()(
 
       startTxHash: null,
       endTxHash: null,
+      finalMinefield: null,
+      finalScore: 0,
+      finalTime: '00:00',
       timerIntervalId: null,
 
       // ========================================================================
@@ -292,6 +303,9 @@ export const useMinesweeperStore = create<MinesweeperStore>()(
         hintsRemaining: 3,
         hintCell: null,
         showHint: false,
+        finalMinefield: null,
+        finalScore: 0,
+        finalTime: '00:00',
       }),
 
       // ========================================================================
@@ -583,6 +597,18 @@ export const useMinesweeperStore = create<MinesweeperStore>()(
 
       setStartTxHash: (hash) => set({ startTxHash: hash }),
       setEndTxHash: (hash) => set({ endTxHash: hash }),
+
+      saveGameSnapshot: () => {
+        const { myMinefield, myScore, timer } = get();
+        const minutes = Math.floor(timer / 60);
+        const seconds = timer % 60;
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        set({
+          finalMinefield: cloneMinefield(myMinefield),
+          finalScore: myScore,
+          finalTime: formattedTime,
+        });
+      },
     }),
     {
       name: 'minesweeper-game-storage',

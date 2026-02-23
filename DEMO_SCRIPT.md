@@ -1,49 +1,43 @@
-# Minesweeper ZK: Hackathon Demo Script (2-3 Minutes)
-
-> **Tip:** Keep this open on another screen while you record using OBS, Loom, or Zoom! Don't worry about being perfect; judges care more about the architecture and that it works.
+# Minesweeper ZK: Demo Script (~2 Minutes)
 
 ---
 
-### [0:00 - 0:30] Introduction & Concept
-**(Screen: Show the Landing Page of your running Next.js app)**
+### [0:00 - 0:20] Intro
+**(Screen: Landing Page)**
 
-"Hi, I'm excited to present **Minesweeper ZK**, built for the Stellar Hacks: ZK Gaming hackathon! 
+"This is **Minesweeper ZK** — a competitive puzzle game where players prove they solved a hidden Minesweeper board using zero-knowledge proofs on Stellar.
 
-The premise of Minesweeper ZK is taking the classic hidden-information game and bringing it on-chain without trusting a centralized server. Traditionally, if you put a Minesweeper board on a blockchain, everyone can read the contract state and see where the mines are. 
+The problem: if you put Minesweeper on a blockchain, everyone can see where the mines are. We fix this with **o1js ZK proofs** — the board is generated locally from a shared seed, and players prove they won without ever revealing the mine positions to the network."
 
-To solve this, I used **o1js zero-knowledge proofs**. Players commit to a random seed, the board generates deterministically on their local machine, and they play the game entirely in their browser. When they win, they generate a ZK proof locally that proves their moves correspond to a valid sweeping of the board—without actually revealing the grid to the network!"
 
-### [0:30 - 1:15] Establishing the Match (The Async Flow)
-**(Screen: Click 'Create Game', deploy the bet transaction via Freighter)**
 
-"Let me show you a live match. Our architecture uses Firebase as an off-chain signaling server to allow **asynchronous matchmaking**. Player 1 doesn't have to wait online for someone to join. 
+### [0:20 - 0:50] Creating a Match
+**(Screen: Connect wallet via Freighter, then Create Game)**
 
-I'm creating a lobby right now and paying the XLM bounty into our custom Soroban smart contract escrow. *[Approve Freighter transaction]*
+"I'll connect my Freighter wallet and create a new game room. This deploys a bet into our Soroban smart contract escrow on Stellar Testnet.
 
-**(Screen: Open an Incognito Window or split screen, and Join the Game as Player 2)**
+*[Approve Freighter tx]*
 
-"Now, as Player 2, I join the lobby and match the bet. *[Approve Freighter transaction]*
-Behind the scenes, when Player 2 joins, our smart contract natively executes a cross-contract call to the official **DoraHacks Game Hub**, triggering `start_game` and registering this match on the Stellar Testnet."
+Now on a second browser, Player 2 joins and matches the bet. When Player 2 joins, the contract automatically calls `start_game` on the official DoraHacks Game Hub."
 
-### [1:15 - 2:00] The Gameplay & ZK Circuit
-**(Screen: Show the game board, start clicking safe tiles, avoid mines)**
+"Our contract talks to the official Game Hub at two moments: when both players join (registering the match) and when we have a winner (reporting the result). It's all automatic cross-contract calls on Stellar Testnet."
 
-"Both players now have the combined seed and play the board locally. The ZK circuit is loaded in the browser.
+### [0:50 - 1:30] Gameplay
+**(Screen: Play the Minesweeper board)**
 
-*(Fast forward to winning the game, or click the last safe tile)*
+"Both players now have the same board generated from the combined seed. They play simultaneously in their browsers. The ZK circuit runs entirely client-side.
 
-When a player solves the board, `o1js` kicks in. It takes the game seed, the sequence of clicked tiles, and the final score, and computes a cryptographic proof verifying that no mines were detonated."
+*(Play through the board — click tiles, flag mines)*
 
-### [2:00 - 2:45] Verification & Game Hub Integration
-**(Screen: Click 'Submit Score & Claim', show Freighter transaction approval)**
+When I clear the board, `o1js` generates a cryptographic proof that my moves are valid against the hidden grid — without revealing mine locations."
 
-"Once the proof is generated, we submit it to our Soroban smart contract via the `submit_score` function. 
-The smart contract acts as the final arbiter. It verifies the ZK proof mathematically. 
+### [1:30 - 2:00] On-Chain Verification
+**(Screen: Submit score, show Freighter tx)**
 
-If it's valid, two things happen instantly on-chain: 
-1. The contract transfers the entire XLM prize pool to the winner's wallet.
-2. The contract triggers `end_game` on the official **Hackathon Game Hub** mock contract.
+"Now I submit my ZK proof to the Soroban contract. It verifies the proof on-chain, transfers the XLM prize pool to the winner, and calls `end_game` on the Game Hub.
 
-**(Screen: Show the final 'You Won!' screen and optionally open Stellar Expert to show the transaction executing)**
+**(Screen: Victory screen)**
 
-"And that's Minesweeper ZK! A provably fair, skill-based puzzle game with asynchronous matchmaking and natively verified zero-knowledge mechanics on the Stellar network. Thank you!"
+"ZK lets us verify game outcomes on-chain without exposing hidden game state — solving the fundamental tension between blockchain transparency and hidden-information gameplay."
+
+That's Minesweeper ZK — provably fair, zero-knowledge competitive gaming on Stellar. Thanks for watching!"

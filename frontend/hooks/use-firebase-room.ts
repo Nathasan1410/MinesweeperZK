@@ -20,7 +20,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, push, onValue, set, update, get, child, query, orderByChild, equalTo } from 'firebase/database';
-import { db, DB_PATHS } from '@/lib/firebase/client';
+import { db, getDb, DB_PATHS } from '@/lib/firebase/client';
 
 // ============================================================================
 // TYPES
@@ -35,13 +35,20 @@ export interface FirebaseRoom {
   player2Address?: string;
   betAmount: number;
   isPublic: boolean;
-  status: 'waiting' | 'ready' | 'playing' | 'finished';
+  status: 'waiting' | 'ready' | 'playing' | 'finished' | 'expired';
   player1Committed?: boolean;
   player2Committed?: boolean;
   seed?: string;
+  sessionId?: string;
+  contractSessionId?: string;
+  finishedAt?: number;
   createdAt: number;
   expiresAt: number;
 }
+
+// Room lifecycle constants
+const ROOM_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+const TIMEOUT_CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
 export interface CreateRoomParams {
   name: string;
@@ -49,6 +56,7 @@ export interface CreateRoomParams {
   creatorAddress: string;
   betAmount?: number;
   isPublic?: boolean;
+  contractSessionId?: number;
 }
 
 // ============================================================================
@@ -92,6 +100,12 @@ export function useRoomList() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    const db = getDb();
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+
     const roomsRef = ref(db, DB_PATHS.ROOMS);
     const publicRoomsQuery = query(roomsRef, orderByChild('isPublic'), equalTo(true));
 
@@ -107,10 +121,15 @@ export function useRoomList() {
         const data = snapshot.val();
         const roomList: FirebaseRoom[] = [];
 
+        const now = Date.now();
         for (const [id, room] of Object.entries(data)) {
           const r = room as any;
-          // Filter to only show active rooms
-          if (r.status === 'waiting' || r.status === 'ready') {
+          // Filter: only show active, non-expired rooms
+          const isActive = r.status === 'waiting' || r.status === 'ready';
+          const isExpired = r.expiresAt && now > r.expiresAt;
+          const isFinished = r.status === 'finished' || r.status === 'expired';
+
+          if (isActive && !isExpired && !isFinished) {
             roomList.push({
               id,
               code: r.code,
@@ -124,6 +143,8 @@ export function useRoomList() {
               player1Committed: r.player1Committed,
               player2Committed: r.player2Committed,
               seed: r.seed,
+              sessionId: r.sessionId,
+              finishedAt: r.finishedAt,
               createdAt: r.createdAt,
               expiresAt: r.expiresAt,
             });
@@ -197,6 +218,12 @@ export function useRoom(roomId: string | null) {
     }
 
     console.log('[useRoom] Starting subscription for room:', roomId);
+    const db = getDb();
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+
     const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
 
     const unsubscribe = onValue(
@@ -231,6 +258,7 @@ export function useRoom(roomId: string | null) {
           player1Committed: data.player1Committed,
           player2Committed: data.player2Committed,
           seed: data.seed,
+          sessionId: data.sessionId,
           createdAt: data.createdAt,
           expiresAt: data.expiresAt,
         });
@@ -268,6 +296,13 @@ export function useRoomByCode(roomCode: string | null) {
     setError(null);
 
     try {
+      const db = getDb();
+      if (!db) {
+        setRoom(null);
+        setLoading(false);
+        return;
+      }
+
       const roomsRef = ref(db, DB_PATHS.ROOMS);
       const snapshot = await get(roomsRef);
 
@@ -406,6 +441,9 @@ export function useRoomMutations() {
         .map(b => chars[b % chars.length])
         .join('');
 
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const roomsRef = ref(db, DB_PATHS.ROOMS);
       const newRoomRef = push(roomsRef);
       const roomId = newRoomRef.key!;
@@ -418,8 +456,9 @@ export function useRoomMutations() {
         betAmount: params.betAmount ?? 10,
         isPublic: params.isPublic ?? true,
         status: 'waiting',
+        contractSessionId: params.contractSessionId ? String(params.contractSessionId) : undefined,
         createdAt: Date.now(),
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        expiresAt: Date.now() + ROOM_EXPIRY_MS, // 15 minutes
       };
 
       await set(newRoomRef, newRoom);
@@ -458,6 +497,9 @@ export function useRoomMutations() {
 
     try {
       console.log('[joinRoom] Joining room:', { roomId, playerAddress });
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
       await update(roomRef, {
         player2Address: playerAddress,
@@ -483,6 +525,9 @@ export function useRoomMutations() {
     status: FirebaseRoom['status']
   ): Promise<boolean> => {
     try {
+      const db = getDb();
+      if (!db) throw new Error('Firebase database not initialized');
+
       const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
       await update(roomRef, { status });
       return true;
@@ -535,9 +580,70 @@ export function formatRoomStatus(status: FirebaseRoom['status']): string {
       return 'Game in Progress';
     case 'finished':
       return 'Game Finished';
+    case 'expired':
+      return 'Expired';
     default:
       return 'Unknown';
   }
+}
+
+// ============================================================================
+// HOOK: ROOM TIMEOUT
+// ============================================================================
+
+/**
+ * Hook to auto-expire rooms that exceed their time limit.
+ * Checks every 30 seconds if the room's expiresAt has passed.
+ * When expired, updates the room status to 'expired' in Firebase
+ * and calls the onTimeout callback.
+ */
+export function useRoomTimeout(
+  roomId: string | null,
+  room: FirebaseRoom | null,
+  onTimeout: () => void
+) {
+  const onTimeoutRef = useRef(onTimeout);
+  onTimeoutRef.current = onTimeout;
+  const hasExpiredRef = useRef(false);
+
+  useEffect(() => {
+    hasExpiredRef.current = false;
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || !room || !room.expiresAt) return;
+    // Don't timeout rooms that are already finished/expired
+    if (room.status === 'finished' || room.status === 'expired') return;
+
+    const checkTimeout = async () => {
+      if (hasExpiredRef.current) return;
+      const now = Date.now();
+      if (now > room.expiresAt) {
+        hasExpiredRef.current = true;
+        console.log('[useRoomTimeout] Room expired:', roomId);
+        try {
+          const db = getDb();
+          if (db) {
+            const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
+            await update(roomRef, {
+              status: 'expired',
+              finishedAt: Date.now(),
+            });
+          }
+        } catch (err) {
+          console.error('[useRoomTimeout] Failed to update expired room:', err);
+        }
+        onTimeoutRef.current();
+      }
+    };
+
+    // Check immediately
+    checkTimeout();
+
+    // Then check periodically
+    const interval = setInterval(checkTimeout, TIMEOUT_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [roomId, room?.expiresAt, room?.status]);
 }
 
 /**
@@ -546,6 +652,9 @@ export function formatRoomStatus(status: FirebaseRoom['status']): string {
  */
 export async function getRoomByCode(roomCode: string): Promise<FirebaseRoom | null> {
   try {
+    const db = getDb();
+    if (!db) return null;
+
     const roomsRef = ref(db, DB_PATHS.ROOMS);
     const snapshot = await get(roomsRef);
 
@@ -575,6 +684,9 @@ export async function getRoomByCode(roomCode: string): Promise<FirebaseRoom | nu
  */
 export async function joinRoom(roomId: string, playerAddress: string): Promise<boolean> {
   try {
+    const db = getDb();
+    if (!db) return false;
+
     const roomRef = ref(db, `${DB_PATHS.ROOMS}/${roomId}`);
     await update(roomRef, {
       player2Address: playerAddress,

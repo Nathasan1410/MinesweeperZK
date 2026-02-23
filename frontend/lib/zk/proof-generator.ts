@@ -4,6 +4,19 @@
  *
  * NOTE: This is a MOCK implementation for demo purposes.
  * In production, this would use RISC Zero to generate actual ZK proofs.
+ *
+ * This module provides the interface for generating and verifying zero-knowledge
+ * proofs that attest to the validity of a Minesweeper game. The proofs ensure
+ * that:
+ * - The player followed the game rules
+ * - The score calculation is correct
+ * - No cheating occurred during gameplay
+ *
+ * The mock implementation simulates the proof generation process without
+ * actual cryptographic verification. In production, this would integrate
+ * with RISC Zero's zkVM to generate Groth16 proofs.
+ *
+ * @packageDocumentation
  */
 
 import { ZKProof, MockZKProof, PlayerMove } from '@/lib/game/types';
@@ -23,11 +36,41 @@ export const RISC_ZERO_IMAGE_ID = 'MOCK_IMAGE_ID_REPLACE_ME';
 /**
  * Generate a ZK proof for the played game
  *
- * @param sessionId - The game session ID
- * @param seed - The seed used to generate the minefield
- * @param moves - All moves made by the player
- * @param score - Final score
- * @returns A mock ZK proof (in production, this would call RISC Zero)
+ * This function creates a zero-knowledge proof that attests to the validity
+ * of a completed Minesweeper game. The proof proves that:
+ * - The player correctly followed the game rules
+ * - The score was calculated fairly based on revealed cells and flags
+ * - No cheating or rule violations occurred during gameplay
+ *
+ * In production, this would:
+ * 1. Serialize the game inputs (seed, moves, score)
+ * 2. Call the RISC Zero prover with the Minesweeper guest circuit
+ * 3. Receive a Groth16 proof and journal back
+ * 4. Return the RealZKProof with cryptographic proof data
+ *
+ * For the mock implementation, it generates a proof-like structure that
+ * simulates the real process without cryptographic validity.
+ *
+ * @param sessionId - The game session ID for tracking
+ * @param seed - The seed used to generate the minefield (ensures deterministic gameplay)
+ * @param moves - All moves made by the player during the game
+ * @param score - Final score after game completion
+ * @returns A mock ZK proof (or real proof in production)
+ *
+ * @example
+ * // Generate a proof for a completed game
+ * const proof = await generateZKProof(
+ *   12345,
+ *   'my-secret-seed',
+ *   [
+ *     { x: 5, y: 5, action: 'reveal', timestamp: 1640995200000, result: 'safe' },
+ *     { x: 3, y: 3, action: 'flag', timestamp: 1640995210000 }
+ *   ],
+ *   850
+ * );
+ *
+ * // Submit the proof to the contract
+ * await submitScore(sessionId, playerAddress, score, moves.length, proof);
  */
 export async function generateZKProof(
   sessionId: number,
@@ -70,8 +113,31 @@ export async function generateZKProof(
 /**
  * Verify a ZK proof
  *
- * @param proof - The proof to verify
- * @returns true if the proof is valid
+ * This function verifies the validity of a zero-knowledge proof. In production,
+ * this would:
+ * 1. Extract the Groth16 proof and public inputs from the proof structure
+ * 2. Call the RISC Zero verifier with the proof
+ * 3. Return true if the proof is valid, false otherwise
+ *
+ * For mock proofs, it performs basic structural validation:
+ * - Session ID is positive
+ * - Score is non-negative
+ * - Move count is non-negative
+ * - Proof and public inputs have content
+ *
+ * @param proof - The ZK proof to verify
+ * @returns true if the proof is valid, false otherwise
+ *
+ * @example
+ * // Verify a proof before submitting to contract
+ * const isValid = await verifyZKProof(proof);
+ * if (!isValid) {
+ *   console.error('Proof is invalid!');
+ *   return;
+ * }
+ *
+ * // Proceed with contract submission
+ * await submitScore(sessionId, playerAddress, score, moves.length, proof);
  */
 export async function verifyZKProof(proof: ZKProof): Promise<boolean> {
   // In production, this would:
