@@ -12,7 +12,7 @@
 
 ## 📺 Demo Video
 
-> **[▶️ Watch the Demo on YouTube](https://youtube.com)** *(Replace with your actual link after uploading)*
+> **[▶️ Watch the Demo on YouTube](https://youtu.be/bkgbru7fe5Q)**
 
 ---
 
@@ -298,7 +298,7 @@ stellar contract deploy \
 | 4 | `end_game()` call to Game Hub | ✅ | Cross-contract call in `reveal_winner()` when winner is decided |
 | 5 | Functional frontend | ✅ | Live at [minesweeper-zk.vercel.app](https://minesweeper-zk.vercel.app) |
 | 6 | Open-source repository | ✅ | This GitHub repo |
-| 7 | Demo video | ✅ | [YouTube link](https://youtube.com) *(update after upload)* |
+| 7 | Demo video | ✅ | [YouTube Demo](https://youtu.be/bkgbru7fe5Q) |
 
 ---
 
