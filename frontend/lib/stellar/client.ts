@@ -7,8 +7,8 @@ import * as FreighterApi from '@stellar/freighter-api';
 
 // Contract addresses (Testnet)
 export const CONTRACTS = {
-  GAME_HUB: 'CB4VZAT2U3UC6XFK3N23SKRF2NDCMP3QHJYMCHHFMZO7MRQ2EMYG',
-  MINESWEEPER_ZK: 'CBJF6WUHRKDVLVWICLPVUCU2CTNJGRRYMFASEESFSB4HKYD54VIWWGLU',
+  GAME_HUB: process.env.NEXT_PUBLIC_GAME_HUB_CONTRACT!,
+  MINESWEEPER_ZK: process.env.NEXT_PUBLIC_MINESWEEPER_CONTRACT!,
 } as const;
 
 // Dev wallet addresses (from setup)
@@ -46,8 +46,22 @@ class StellarClient {
    */
   async connectWallet(): Promise<StellarAccount | null> {
     try {
+      // Bypass `isConnected()` since it often hangs browsers indefinitely if the wallet is locked.
+      // Force the connection with a 5-second timeout so it never spins infinitely.
+      const accessResponse: any = await Promise.race([
+        FreighterApi.requestAccess(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Freighter wallet taking too long to respond. Please unlock it manually!')), 5000))
+      ]);
+
+      if (accessResponse && accessResponse.error) {
+        console.error('Freighter access denied:', accessResponse.error);
+        alert(`Freighter Error: ${accessResponse.error}`);
+        return null;
+      }
+
+      // Then get the address
       const result = await FreighterApi.getAddress();
-      if (result.address) {
+      if (result && result.address) {
         this.currentAccount = {
           address: result.address,
           isConnected: true,
@@ -55,9 +69,12 @@ class StellarClient {
         };
         this.currentDevWallet = null;
         return this.currentAccount;
+      } else {
+        alert("Failed to get Freighter address.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Wallet connection failed:', error);
+      alert(`Wallet Connection Failed: ${error.message || 'Make sure Freighter is installed and unlocked!'}`);
     }
     return null;
   }
